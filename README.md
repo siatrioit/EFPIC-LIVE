@@ -20,3 +20,9 @@ First-run flow: **Jauna galerija** → nosaukums + Live/Download režīms → ie
 
 Camera import, real FTP upload, and battery/network warnings are placeholders for later integration.
 
+## Web API (cPanel)
+
+See [`web/README.md`](web/README.md). PHP endpoints: health, create gallery, list images, upload JPG. Copy `web/config/config.example.php` to `config.php` on the server.
+
+`mobile/lib/services/web_api_service.dart` — stub URIs for future HTTP wiring.
+
