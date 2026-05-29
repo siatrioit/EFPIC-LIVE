@@ -25,7 +25,7 @@ if ($method === 'OPTIONS') {
 
 try {
     if ($uri === '/api/health' || $uri === '/health') {
-        efpic_handle_health();
+        efpic_handle_health($config);
     }
 
     if ($uri === '/api/galleries' && $method === 'POST') {

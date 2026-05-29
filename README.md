@@ -7,6 +7,7 @@ Android (future iOS) app + cPanel-hosted web backend for collecting images from 
 - `mobile/` — Flutter mobile app (Android first, iOS later)
 - `web/` — PHP backend/API for cPanel hosting
 - `docs/` — project docs (`docs/SPEC.md`)
+- `CHANGELOG.md` — versiju vēsture (sinhronizē ar lietotnes «Par / Izmaiņas»)
 
 ## Mobile app (dev)
 

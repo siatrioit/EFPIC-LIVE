@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
 
-function efpic_handle_health(): void
+function efpic_handle_health(array $config): void
 {
     efpic_json_response(200, [
         'ok' => true,
         'service' => 'efpic-live',
-        'version' => '0.1.0',
+        'version' => $config['app_version'] ?? '0.0.0',
     ]);
 }
 
