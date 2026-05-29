@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
+import 'services/alert_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AlertService.instance.init();
   runApp(const EfpicLiveApp());
 }
 

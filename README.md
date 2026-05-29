@@ -26,3 +26,9 @@ See [`web/README.md`](web/README.md). PHP endpoints: health, create gallery, lis
 
 `mobile/lib/services/web_api_service.dart` — stub URIs for future HTTP wiring.
 
+### Implemented (v0.2)
+
+- **FTP**: real upload via `ftpconnect` (preset / one-off, JPG resize+quality, FTPS)
+- **Import**: gallery folder watch (Live), file picker + scan (Download), EXIF star filter
+- **Alerts**: battery threshold, offline notification, all FTP uploads complete (see app bar bell icon)
+

@@ -6,6 +6,7 @@ import '../models/gallery.dart';
 import 'event_setup_screen.dart';
 import 'ftp_presets_screen.dart';
 import 'gallery_screen.dart';
+import 'global_settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,6 +47,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('EFPIC LIVE'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Brīdinājumi',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const GlobalSettingsScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings_ethernet),
             tooltip: 'FTP preseti',

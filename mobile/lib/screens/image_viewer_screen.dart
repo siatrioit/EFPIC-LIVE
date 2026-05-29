@@ -1,16 +1,22 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../models/delivery_target.dart';
 import '../models/gallery.dart';
 import '../models/gallery_image.dart';
+import '../services/gallery_workflow_service.dart';
 
 class ImageViewerScreen extends StatefulWidget {
   const ImageViewerScreen({
     super.key,
     required this.gallery,
+    required this.workflow,
     required this.initialIndex,
   });
 
   final Gallery gallery;
+  final GalleryWorkflowService workflow;
   final int initialIndex;
 
   @override
@@ -21,12 +27,15 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   late final PageController _pageController;
   late List<GalleryImage> _images;
   late int _index;
+  late GalleryWorkflowService _workflow;
+  bool _uploading = false;
 
   @override
   void initState() {
     super.initState();
     _images = List.from(widget.gallery.images);
     _index = widget.initialIndex;
+    _workflow = widget.workflow;
     _pageController = PageController(initialPage: _index);
   }
 
@@ -47,11 +56,12 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   }
 
   Future<void> _confirmDelete() async {
+    final img = _images[_index];
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Dzēst bildi?'),
-        content: Text(_images[_index].fileName),
+        content: Text(img.fileName),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -65,6 +75,13 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
       ),
     );
     if (ok != true) return;
+
+    final path = img.localPath;
+    if (path != null) {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    }
+
     setState(() {
       _images.removeAt(_index);
       if (_images.isEmpty) {
@@ -84,19 +101,64 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     );
   }
 
-  void _sendToFtp() {
+  Future<void> _sendToFtp() async {
+    if (widget.gallery.config.deliveryTarget != DeliveryTargetType.ftp) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Šī galerija izmanto Web, ne FTP')),
+      );
+      return;
+    }
+
+    setState(() => _uploading = true);
     _updateImage(
       _images[_index].copyWith(uploadStatus: UploadStatus.uploading),
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('FTP sūtīšana — placeholder (vēlāk)')),
-    );
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      _updateImage(
-        _images[_index].copyWith(uploadStatus: UploadStatus.sent),
-      );
+
+    final g = widget.gallery.copyWith(images: _images);
+    final updated = await _workflow.uploadImage(g, _images[_index].id);
+    if (!mounted) return;
+
+    setState(() {
+      _images = List.from(updated.images);
+      _workflow = GalleryWorkflowService(updated);
+      _uploading = false;
     });
+
+    final img = _images[_index];
+    if (img.uploadStatus == UploadStatus.sent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nosūtīts uz FTP')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('FTP sūtīšana neizdevās')),
+      );
+    }
+  }
+
+  Widget _imageContent(GalleryImage item) {
+    final path = item.localPath;
+    if (path != null && File(path).existsSync()) {
+      return InteractiveViewer(
+        child: Image.file(
+          File(path),
+          fit: BoxFit.contain,
+          errorBuilder: (_, e, st) => _placeholder(item),
+        ),
+      );
+    }
+    return _placeholder(item);
+  }
+
+  Widget _placeholder(GalleryImage item) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.photo_size_select_large, size: 120, color: Colors.grey.shade600),
+        const SizedBox(height: 16),
+        Text(item.fileName, style: const TextStyle(color: Colors.white70)),
+      ],
+    );
   }
 
   @override
@@ -106,6 +168,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     }
 
     final img = _images[_index];
+    final ftp = widget.gallery.config.deliveryTarget == DeliveryTargetType.ftp;
 
     return PopScope(
       canPop: false,
@@ -123,11 +186,21 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
             onPressed: _popWithResult,
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.cloud_upload_outlined),
-              tooltip: 'Sūtīt uz FTP',
-              onPressed: _sendToFtp,
-            ),
+            if (ftp)
+              IconButton(
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.cloud_upload_outlined),
+                tooltip: 'Sūtīt uz FTP',
+                onPressed: _uploading ? null : _sendToFtp,
+              ),
             IconButton(
               icon: const Icon(Icons.block),
               tooltip: 'Nesūtīt',
@@ -144,37 +217,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
           itemCount: _images.length,
           onPageChanged: (i) => setState(() => _index = i),
           itemBuilder: (context, i) {
-            final item = _images[i];
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.photo_size_select_large,
-                    size: 120,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    item.fileName,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  if (item.starRating > 0)
-                    Text(
-                      '★' * item.starRating,
-                      style: const TextStyle(color: Colors.amber, fontSize: 20),
-                    ),
-                  const SizedBox(height: 8),
-                  Chip(
-                    label: Text(
-                      item.uploadStatus.label,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: Colors.white24,
-                  ),
-                ],
-              ),
-            );
+            return Center(child: _imageContent(_images[i]));
           },
         ),
         bottomNavigationBar: img.uploadStatus == UploadStatus.excluded
@@ -188,7 +231,16 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                   ),
                 ),
               )
-            : null,
+            : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    img.uploadStatus.label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                ),
+              ),
       ),
     );
   }
