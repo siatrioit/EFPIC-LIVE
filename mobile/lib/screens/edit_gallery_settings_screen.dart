@@ -4,6 +4,7 @@ import '../models/event_mode.dart';
 import '../models/gallery.dart';
 import 'download_settings_screen.dart';
 import 'live_settings_screen.dart';
+import 'photo_box_settings_screen.dart';
 
 /// Atver esošās galerijas iestatījumus (Live vai Download).
 class EditGallerySettingsScreen extends StatelessWidget {
@@ -15,6 +16,12 @@ class EditGallerySettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (gallery.config.mode == EventMode.live) {
       return LiveSettingsScreen(
+        draft: gallery.config,
+        existingGallery: gallery,
+      );
+    }
+    if (gallery.config.mode == EventMode.photoBox) {
+      return PhotoBoxSettingsScreen(
         draft: gallery.config,
         existingGallery: gallery,
       );

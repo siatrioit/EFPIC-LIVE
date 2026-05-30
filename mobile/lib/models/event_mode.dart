@@ -1,6 +1,7 @@
 enum EventMode {
   live,
-  download;
+  download,
+  photoBox;
 
   String get label {
     switch (this) {
@@ -8,6 +9,8 @@ enum EventMode {
         return 'Live režīms';
       case EventMode.download:
         return 'Download režīms';
+      case EventMode.photoBox:
+        return 'Foto kaste';
     }
   }
 
@@ -17,6 +20,8 @@ enum EventMode {
         return 'Telefons visu laiku pieslēgts kamerai';
       case EventMode.download:
         return 'Pieslēdz telefonu tikai lejupielādei';
+      case EventMode.photoBox:
+        return 'Pasākums: Nikon USB, rāmis, 9×13, apstiprinājums';
     }
   }
 }

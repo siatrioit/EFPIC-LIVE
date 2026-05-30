@@ -4,6 +4,11 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.12] — 2026-05-30
+
+### Pievienots
+- **Foto kaste** (Fāze 1): jauns režīms — Nikon USB (jaunākais JPG), krāsu presets + PNG rāmis, 9×13 sagatavojums, apstiprinājums pirms saglabāšanas (druka WCM2 — vēlāk)
+
 ## [0.3.11] — 2026-05-30
 
 ### Labots

@@ -90,10 +90,13 @@ class UsbCameraCoordinator {
   Future<Gallery?> _pickTargetGallery() async {
     final all = await AppRepository.instance.loadGalleries();
     if (all.isEmpty) return null;
-    final live = all.where((g) => g.config.mode == EventMode.live).toList();
+    final live = all
+        .where((g) => g.config.mode == EventMode.live)
+        .toList();
     if (live.isNotEmpty) return live.first;
-    final download =
-        all.where((g) => g.config.mode == EventMode.download).toList();
+    final download = all
+        .where((g) => g.config.mode == EventMode.download)
+        .toList();
     if (download.isNotEmpty) return download.first;
     return all.first;
   }

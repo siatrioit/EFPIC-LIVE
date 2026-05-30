@@ -8,6 +8,7 @@ import 'app_settings_screen.dart';
 import 'event_setup_screen.dart';
 import 'ftp_presets_screen.dart';
 import 'gallery_screen.dart';
+import 'photo_box_session_screen.dart';
 import 'about_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -154,10 +155,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () async {
+                            final screen = g.config.mode == EventMode.photoBox
+                                ? PhotoBoxSessionScreen(galleryId: g.id)
+                                : GalleryScreen(galleryId: g.id);
                             await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => GalleryScreen(galleryId: g.id),
-                              ),
+                              MaterialPageRoute(builder: (_) => screen),
                             );
                             await _reload();
                           },

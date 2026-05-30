@@ -4,6 +4,7 @@ import '../models/event_config.dart';
 import '../models/event_mode.dart';
 import 'download_settings_screen.dart';
 import 'live_settings_screen.dart';
+import 'photo_box_settings_screen.dart';
 
 class EventSetupScreen extends StatefulWidget {
   const EventSetupScreen({super.key});
@@ -39,10 +40,16 @@ class _EventSetupScreenState extends State<EventSetupScreen> {
           builder: (_) => LiveSettingsScreen(draft: draft),
         ),
       );
-    } else {
+    } else if (_mode == EventMode.download) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => DownloadSettingsScreen(draft: draft),
+        ),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PhotoBoxSettingsScreen(draft: draft),
         ),
       );
     }

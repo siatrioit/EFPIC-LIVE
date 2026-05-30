@@ -130,10 +130,10 @@ class PhotoBoxConfig {
 
 ### Fāze 1 — Bez drukas (MVP)
 
-- [ ] `EventMode.photoBox` + iestatījumu ekrāns
-- [ ] USB: viena bildes / jaunākās lejupielāde
-- [ ] Preset + rāmja uzklāšana → 9×13 JPG
-- [ ] Apstiprinājuma UI (drukas poga **saglabā failu**, bet drukā manuāli ārpus lietotnes — testēšanai)
+- [x] `EventMode.photoBox` + iestatījumu ekrāns
+- [x] USB: jaunākā JPG lejupielāde
+- [x] Preset + rāmja uzklāšana → 9×13 JPG
+- [x] Apstiprinājuma UI («Drukāt» saglabā; WCM2 druka — Fāze 2)
 
 ### Fāze 2 — DNP druka (WCM2)
 

@@ -19,6 +19,9 @@ class EventConfig {
     this.autoSendToFtp = false,
     this.importPolicy = ImportPolicy.always,
     this.ftpUploadFormat = FtpUploadFormat.jpg,
+    this.photoBoxFramePath,
+    this.photoBoxEditPresetId,
+    this.photoBoxPrintSizeLabel = '9x13',
   });
 
   final String name;
@@ -34,6 +37,10 @@ class EventConfig {
   final bool autoSendToFtp;
   final ImportPolicy importPolicy;
   final FtpUploadFormat ftpUploadFormat;
+  /// Absolūts ceļš uz PNG rāmi galerijas mapē (Foto kaste).
+  final String? photoBoxFramePath;
+  final String? photoBoxEditPresetId;
+  final String photoBoxPrintSizeLabel;
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -73,5 +80,9 @@ class EventConfig {
         ),
         ftpUploadFormat: FtpUploadFormat.values
             .byName(json['ftpUploadFormat'] as String? ?? 'jpg'),
+        photoBoxFramePath: json['photoBoxFramePath'] as String?,
+        photoBoxEditPresetId: json['photoBoxEditPresetId'] as String?,
+        photoBoxPrintSizeLabel:
+            json['photoBoxPrintSizeLabel'] as String? ?? '9x13',
       );
 }
