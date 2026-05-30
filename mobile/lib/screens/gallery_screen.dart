@@ -1398,6 +1398,91 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
+  /// 0 = jebkurš reitings (>0), 1–5 = konkrēts skaits.
+  static const _anyRatingMenuValue = 0;
+
+  RelativeRect _menuBelowChip(BuildContext chipContext) {
+    final box = chipContext.findRenderObject() as RenderBox?;
+    if (box == null) {
+      return RelativeRect.fromLTRB(8, 80, 8, 0);
+    }
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    return RelativeRect.fromLTRB(
+      offset.dx,
+      offset.dy + size.height,
+      offset.dx + size.width,
+      offset.dy + size.height + 4,
+    );
+  }
+
+  Future<void> _showRatingFilterMenu(BuildContext chipContext) async {
+    final picked = await showMenu<int>(
+      context: chipContext,
+      position: _menuBelowChip(chipContext),
+      items: [
+        const PopupMenuItem(
+          value: _anyRatingMenuValue,
+          child: Text('Jebkurš reitings'),
+        ),
+        for (var s = 1; s <= 5; s++)
+          PopupMenuItem(
+            value: s,
+            child: Text('★' * s),
+          ),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (picked == _anyRatingMenuValue) {
+        _filter = const GalleryViewFilter(
+          kind: GalleryViewFilterKind.withRating,
+        );
+      } else {
+        _filter = GalleryViewFilter(
+          kind: GalleryViewFilterKind.withRating,
+          ratingStars: picked,
+        );
+      }
+    });
+  }
+
+  Future<void> _showColorFilterMenu(BuildContext chipContext) async {
+    final picked = await showMenu<ImageColorLabel>(
+      context: chipContext,
+      position: _menuBelowChip(chipContext),
+      items: ImageColorLabel.values
+          .where((c) => c != ImageColorLabel.none)
+          .map(
+            (c) => PopupMenuItem(
+              value: c,
+              child: Row(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: c.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(c.label),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+    if (picked == null || !mounted) return;
+    setState(
+      () => _filter = GalleryViewFilter(
+        kind: GalleryViewFilterKind.byColor,
+        color: picked,
+      ),
+    );
+  }
+
   Widget _ratingFilterControl() {
     final active = _filter.kind == GalleryViewFilterKind.withRating;
     final label = active
@@ -1407,35 +1492,27 @@ class _GalleryScreenState extends State<GalleryScreen> {
         : 'Ar reitingu';
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: PopupMenuButton<int?>(
-        tooltip: 'Filtrēt pēc reitinga',
-        onSelected: (stars) => setState(
-          () => _filter = GalleryViewFilter(
-            kind: GalleryViewFilterKind.withRating,
-            ratingStars: stars,
-          ),
-        ),
-        itemBuilder: (_) => [
-          const PopupMenuItem(
-            value: null,
-            child: Text('Jebkurš reitings'),
-          ),
-          for (var s = 1; s <= 5; s++)
-            PopupMenuItem(
-              value: s,
-              child: Text('★' * s),
-            ),
-        ],
-        child: FilterChip(
+      child: Builder(
+        builder: (chipContext) => FilterChip(
           label: Text(label),
           selected: active,
-          onSelected: active
-              ? null
-              : (_) => setState(
-                    () => _filter = const GalleryViewFilter(
-                      kind: GalleryViewFilterKind.withRating,
-                    ),
-                  ),
+          onSelected: (_) async {
+            if (!active) {
+              setState(
+                () => _filter = const GalleryViewFilter(
+                  kind: GalleryViewFilterKind.withRating,
+                ),
+              );
+              return;
+            }
+            await _showRatingFilterMenu(chipContext);
+          },
+          onDeleted: active
+              ? () => _showRatingFilterMenu(chipContext)
+              : null,
+          deleteIcon: active
+              ? const Icon(Icons.arrow_drop_down, size: 18)
+              : null,
         ),
       ),
     );
@@ -1443,31 +1520,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Widget _colorFilterControl() {
     final active = _filter.kind == GalleryViewFilterKind.byColor;
-    final label =
-        active ? _filter.color.label : 'Krāsas';
+    final label = active ? _filter.color.label : 'Krāsas';
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: PopupMenuButton<ImageColorLabel>(
-        tooltip: 'Filtrēt pēc krāsas',
-        onSelected: (c) => setState(
-          () => _filter = GalleryViewFilter(
-            kind: GalleryViewFilterKind.byColor,
-            color: c,
-          ),
-        ),
-        itemBuilder: (_) => ImageColorLabel.values
-            .where((c) => c != ImageColorLabel.none)
-            .map(
-              (c) => PopupMenuItem(
-                value: c,
-                child: Text(c.label),
-              ),
-            )
-            .toList(),
-        child: FilterChip(
+      child: Builder(
+        builder: (chipContext) => FilterChip(
           label: Text(label),
           selected: active,
-          onSelected: (_) {},
+          onSelected: (_) => _showColorFilterMenu(chipContext),
+          onDeleted: active
+              ? () => _showColorFilterMenu(chipContext)
+              : null,
+          deleteIcon: active
+              ? const Icon(Icons.arrow_drop_down, size: 18)
+              : null,
         ),
       ),
     );

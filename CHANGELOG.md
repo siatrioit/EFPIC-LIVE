@@ -4,6 +4,12 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.10] — 2026-05-30
+
+### Labots
+- Reitinga filtrs: «Jebkurš reitings» atkal darbojas pēc konkrēta ★ izvēles
+- Krāsu filtrs: izvēlne atveras (čips + bultiņa)
+
 ## [0.3.9] — 2026-05-30
 
 ### Labots

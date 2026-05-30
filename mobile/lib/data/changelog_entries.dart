@@ -19,6 +19,15 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.10',
+    date: '2026-05-30',
+    summary: 'Galerijas filtri — labojumi',
+    items: [
+      '«Jebkurš reitings» atkal rāda visas bildes ar reitingu',
+      'Krāsu filtrs: izvēlne atveras, var izvēlēties krāsu',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.9',
     date: '2026-05-30',
     summary: 'Galerijas filtri',
@@ -152,4 +161,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.9';
+const String appVersionLabel = '0.3.10';
