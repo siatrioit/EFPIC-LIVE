@@ -11,6 +11,7 @@ Portatīvā foto kaste pasākumam: operators staigā ar Android tālruni, fotogr
 | Parametrs | Vērtība |
 |-----------|---------|
 | Printeris | **DNP DS620** |
+| Bezvadu modulis | **DNP WCM2** (Wireless Connect Module) |
 | Izdrukas izmērs | **9×13 cm** (portrets) |
 | Avots | **Nikon USB** (MTP, kā citos režīmos) |
 | Druka | **Vienmēr ar apstiprinājumu** (nav auto-drukas) |
@@ -26,7 +27,7 @@ flowchart LR
   C --> D{Apstiprināt druku?}
   D -->|Jā| E[Sagatavots JPG 9x13]
   D -->|Nē| F[Galerijā bez drukas]
-  E --> G[DNP DS620]
+  E --> G[WCM2 → DS620]
   E --> F
 ```
 
@@ -110,7 +111,7 @@ class PhotoBoxConfig {
 ## UI ekrāni (plāns)
 
 1. **Jauna galerija** — trešā karte: «Foto Kaste».
-2. **Foto kastes iestatījumi** — rāmis, preset, printera/WCM piezīmes, testa izdruka.
+2. **Foto kastes iestatījumi** — rāmis, preset, WCM2 (hot folder ceļš vai printer instance), testa izdruka.
 3. **Foto kastes sesija** (ne parastā režģa UI):
    - liels preview
    - «No kameras» / USB status
@@ -145,8 +146,8 @@ class PhotoBoxConfig {
 
 ## Atvērtie jautājumi (pirms kodēšanas)
 
-1. Vai pasākumā būs **WCM-Plus**, vai DS620 tieši uz cita risinājuma (piem. klēpjdators)?
-2. Precīzs WCM hot folder nosaukums **9×13** formātam (no WCM konfigurācijas).
+1. ~~WCM~~ — **WCM2** ✓ (fiksēts).
+2. Precīzs WCM2 **hot folder** ceļš vai **printer instance** nosaukums 9×13 (no admin / «My Files» → Network storage).
 3. Vai viena bilde = viena druka, vai atļaut **vairākas kopijas** pēc apstiprinājuma?
 4. Vai rāmis un preset ir **vieni visai galerijai**, vai maināmi sesijas laikā?
 
