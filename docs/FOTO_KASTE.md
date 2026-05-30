@@ -39,31 +39,36 @@ flowchart LR
 
 ---
 
-## DNP DS620 + Android — tehniskā realitāte
+## DNP DS620 + WCM2 + Android — tehniskā realitāte
 
-DNP **nav** publicēta native Android SDK lietotnei tiešai USB integrācijai ar DS620 (driveri galvenokārt Windows/macOS).
+DNP **nav** publicēta native Android SDK tiešai USB integrācijai ar DS620. Tavs stack: **DS620 (USB) → WCM2 (Wi‑Fi hotspot) → Android**.
 
-Ieteicamais ceļš pasākumiem:
+### WCM2 (tavs modulis)
 
-### A) DNP WCM-Plus (ieteicams)
+- **DS620** pieslēgts WCM2 USB portam.
+- WCM2 rada **savu Wi‑Fi** (līdz ~10 m no moduļa).
+- **Konfigurācija:** pieslēdzies WCM2 tīklam → pārlūkā admin lapa (parasti `http://192.168.4.1` — skat. WCM2 Quick Start).
+- Adminā: pievieno printeri, ieslēdz izmērus (t.sk. **9×13** vai tuvākais no kasetes).
+- **Android 9+:** druka caur **IPP / AirPrint** — printera «instance» parādās sistēmas «Drukāt».
+- DNP ekosistēmā WCM2 atbalsta arī **Hot Folder** (kopē JPG uz tīkla mapi → automātiska druka), ja tavā firmware/portālā tas ir redzams.
 
-- DS620 pieslēgts **WCM-Plus** caur USB; tālrunis pieslēdzas WCM-Plus Wi‑Fi.
-- Android: kopēt sagatavoto JPG uz **hot folder** atbilstošajam izmēram (SMB / «Network storage» — skat. WCM-Plus rokasgrāmatu v5.6).
-- EFPIC sagatavo failu ar precīzu izmēru un nosaukumu, pēc apstiprinājuma **kopē** uz `dnpwcm` hot folder 9×13 (precīzs mapes nosaukums jākalibrē ar WCM konfigurāciju).
+### EFPIC drukas ceļi (prioritāte)
 
-**Plusi:** Oficiāli atbalstīts Android 11+; DS620 sarakstā.  
-**Mīnusi:** Nepieciešams WCM-Plus aparatūra; tīkla konfigurācija pasākuma vietā.
+| # | Ceļš | Apraksts |
+|---|------|----------|
+| 1 | **Hot folder** | Pēc «Drukāt» kopēt `print_ready.jpg` uz WCM2 mapi 9×13 (`dnpwcm` / Network storage — nosaukumu nosaka WCM2) |
+| 2 | **`printing` (IPP)** | Sistēmas drukas dialogs → WCM2 printer instance 9×13 |
+| 3 | Manuāli | Rezerve / testi |
 
-### B) Android sistēmas druka (rezerve)
+**Nedarīt:** tieša USB druka no lietotnes uz DS620; auto-druka bez apstiprinājuma.
 
-- `printing` pakete → izvēlēties printeri, ja WCM rāda kā tīkla/AirPrint printeri.
-- Mazāk kontroles pār izmēru/krāsām; jāpārbauda uz vietas.
+### Pasākuma checklist
 
-### C) OTG USB tieši uz DS620 (nenoteikts)
-
-- Praktiski **nedarīt** pirmajā versijā — driveru un stabilā API nav.
-
-**Secinājums implementācijai:** Fāze drukas — **WCM-Plus hot folder** + fallback «Kopīgot / Drukāt» caur sistēmu.
+1. WCM2 + DS620 ieslēgti, kasete atbilst 9×13.
+2. Tālrunis uz **WCM2 Wi‑Fi** (SSID/parole no uzlīmes).
+3. Admin: printer instance **9×13**.
+4. Pārbaudīt: vai pieejams **hot folder** (My Files → Network storage → DNPIMAGE) vai tikai IPP druka.
+5. Nikon USB + WCM2 Wi‑Fi — pārbaudīt vienlaikus uz vietas.
 
 ---
 
@@ -76,7 +81,7 @@ Ieteicamais ceļš pasākumiem:
   - rāmis: PNG ar alfa, 9×13 canvas
   - eksports: viens JPG `print_ready.jpg` galerijas mapē
 
-Papīra izmēra kods DNP driverī/WCM mapē **jāsaskaņo** ar faktisko kaseti (9×13 vai tuvākais atbalstītais — pārbaudīt uz DS620 + WCM pirms pasākuma).
+WCM2 hot folder / printer instance nosaukums **9×13** — jāsaskaņo adminā un pirms pasākuma ar faktisko kaseti.
 
 ---
 
@@ -130,11 +135,12 @@ class PhotoBoxConfig {
 - [ ] Preset + rāmja uzklāšana → 9×13 JPG
 - [ ] Apstiprinājuma UI (drukas poga **saglabā failu**, bet drukā manuāli ārpus lietotnes — testēšanai)
 
-### Fāze 2 — DNP druka
+### Fāze 2 — DNP druka (WCM2)
 
-- [ ] WCM-Plus hot folder integrācija (Storage Access / SMB)
-- [ ] Pēc «Drukāt» — kopēt `print_ready.jpg` uz konfigurētu mapi
-- [ ] Kļūdu snackbar (nav tīkla, WCM nav pieejams)
+- [ ] Hot folder kopēšana (ja WCM2 atbalsta)
+- [ ] Alternatīva: `printing` → WCM2 IPP instance 9×13
+- [ ] Pēc «Drukāt» — nosūtīt `print_ready.jpg`
+- [ ] Kļūdu snackbar (nav WCM2 Wi‑Fi, mape nav pieejama)
 
 ### Fāze 3 — Pasākuma polish
 
