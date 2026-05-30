@@ -1,0 +1,23 @@
+---
+description: Obligāta versiju un izmaiņu reģistrēšana pēc katra release
+alwaysApply: true
+---
+
+# Versiju uzskaite (EFPIC LIVE)
+
+Pēc **būtiskām** izmaiņām mobilajā lietotnē vai API — pirms uzskatīt uzdevumu par pabeigtu:
+
+1. **`mobile/pubspec.yaml`** — palielini `version` (`MAJOR.MINOR.PATCH+BUILD`, build +1).
+2. **`CHANGELOG.md`** (repozitorija sakne) — jauns ieraksts ar datumu un punktiem.
+3. **`mobile/lib/data/changelog_entries.dart`** — tas pats lietotnē; **`appVersionLabel`** = `version` bez `+`.
+4. **`docs/RELEASE.md`** — sekot checklist (regresijas, analyze, build).
+
+Ja lietotājs lūdz commit/push uz GitHub:
+
+```text
+git add -A
+git commit -m "..."
+git push
+```
+
+Neaizmirsti: labojot vienu funkciju, pārbaudi, ka nav noņemts UI (rediģēšana, RAW preview, orientācija) — skat. `docs/RELEASE.md` tabulu.

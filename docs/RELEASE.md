@@ -5,6 +5,9 @@ Katru reizi, kad maina lietotnes versiju (`mobile/pubspec.yaml`), **obligāti** 
 1. **`CHANGELOG.md`** (repozitorija sakne) — īss kopsavilkums angļu/latviešu punktos.
 2. **`mobile/lib/data/changelog_entries.dart`** — tas pats lietotnē ekrānā «Par programmu».
 3. **`appVersionLabel`** tajā pašā Dart failā — jāsakrīt ar `pubspec` `version` (pirms `+`).
+4. **Git** — `git commit` un `git push` uz [GitHub](https://github.com/siatrioit/EFPIC-LIVE).
+
+Cursor projekta noteikums: `.cursor/rules/version-and-changelog.mdc` (AI atgādina par šo procesu).
 
 ## Versijas formāts
 
