@@ -17,7 +17,7 @@ class EventConfig {
     this.ftpPresetId,
     this.oneOffFtp,
     this.autoSendToFtp = false,
-    this.importPolicy = ImportPolicy.ask,
+    this.importPolicy = ImportPolicy.always,
     this.ftpUploadFormat = FtpUploadFormat.jpg,
   });
 
@@ -67,8 +67,10 @@ class EventConfig {
           json['oneOffFtp'] as Map<String, dynamic>?,
         ),
         autoSendToFtp: json['autoSendToFtp'] as bool? ?? false,
-        importPolicy: ImportPolicy.values
-            .byName(json['importPolicy'] as String? ?? 'ask'),
+        importPolicy: ImportPolicy.values.firstWhere(
+          (e) => e.name == (json['importPolicy'] as String?),
+          orElse: () => ImportPolicy.ask,
+        ),
         ftpUploadFormat: FtpUploadFormat.values
             .byName(json['ftpUploadFormat'] as String? ?? 'jpg'),
       );

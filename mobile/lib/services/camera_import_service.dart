@@ -6,10 +6,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../data/app_repository.dart';
 import '../models/event_mode.dart';
 import '../models/file_format.dart';
 import '../models/gallery.dart';
 import '../models/gallery_image.dart';
+import '../models/image_color_label.dart';
 import 'jpg_processor.dart';
 
 class ImportCandidate {
@@ -17,11 +19,15 @@ class ImportCandidate {
     required this.sourcePath,
     required this.fileName,
     required this.starRating,
+    this.thumbPath,
+    this.colorLabel = ImageColorLabel.none,
   });
 
   final String sourcePath;
   final String fileName;
   final int starRating;
+  final String? thumbPath;
+  final ImageColorLabel colorLabel;
 }
 
 class CameraImportService {
@@ -31,7 +37,8 @@ class CameraImportService {
   final _uuid = const Uuid();
   final Map<String, StreamSubscription<FileSystemEvent>?> _watchers = {};
   final Map<String, Timer?> _pollTimers = {};
-  final Map<String, Set<String>> _knownFiles = {};
+  final Map<String, Timer?> _debounceTimers = {};
+  final Map<String, Set<String>> _importedPaths = {};
 
   static const _jpgExt = {'.jpg', '.jpeg'};
   static const _rawExt = {
@@ -46,45 +53,60 @@ class CameraImportService {
   };
 
   void startWatching(
-    Gallery gallery, {
-    required void Function(List<ImportCandidate> batch) onNewFiles,
-    Duration pollInterval = const Duration(seconds: 3),
+    String galleryId, {
+    required Future<void> Function(List<ImportCandidate> batch) onNewFiles,
+    Duration pollInterval = const Duration(seconds: 5),
   }) {
-    stopWatching(gallery.id);
-    final dirPath = gallery.folderPath;
-    if (dirPath == null) return;
-
-    _knownFiles[gallery.id] = {
-      for (final img in gallery.images)
-        if (img.localPath != null) img.localPath!,
-    };
+    stopWatching(galleryId);
 
     Future<void> scan() async {
+      final gallery = await AppRepository.instance.getGalleryById(galleryId);
+      if (gallery == null || gallery.config.mode != EventMode.live) return;
+
       final batch = await scanFolder(gallery, onlyNew: true);
-      if (batch.isNotEmpty) onNewFiles(batch);
+      if (batch.isNotEmpty) await onNewFiles(batch);
     }
 
-    if (gallery.config.mode == EventMode.live) {
-      scan();
-      _pollTimers[gallery.id] = Timer.periodic(pollInterval, (_) => scan());
+    void scheduleScan() {
+      _debounceTimers.remove(galleryId)?.cancel();
+      _debounceTimers[galleryId] =
+          Timer(const Duration(milliseconds: 900), scan);
+    }
+
+    unawaited(() async {
+      final g = await AppRepository.instance.getGalleryById(galleryId);
+      if (g == null) return;
+      _importedPaths[galleryId] = {
+        for (final img in g.images)
+          if (img.localPath != null) img.localPath!,
+      };
+      scheduleScan();
+      final dirPath = g.folderPath;
+      if (dirPath == null) return;
       try {
-        final dir = Directory(dirPath);
-        _watchers[gallery.id] = dir.watch(recursive: false).listen((event) {
+        _watchers[galleryId] = Directory(dirPath)
+            .watch(recursive: false)
+            .listen((event) {
           if (event.type == FileSystemEvent.create ||
               event.type == FileSystemEvent.modify) {
-            scan();
+            scheduleScan();
           }
         });
-      } catch (_) {
-        // Some devices restrict watch; polling still runs.
-      }
-    }
+      } catch (_) {}
+    }());
+
+    _pollTimers[galleryId] = Timer.periodic(pollInterval, (_) => scheduleScan());
   }
 
   void stopWatching(String galleryId) {
     _pollTimers.remove(galleryId)?.cancel();
+    _debounceTimers.remove(galleryId)?.cancel();
     _watchers.remove(galleryId)?.cancel();
-    _knownFiles.remove(galleryId);
+    _importedPaths.remove(galleryId);
+  }
+
+  void markImported(String galleryId, Iterable<String> paths) {
+    _importedPaths.putIfAbsent(galleryId, () => {}).addAll(paths);
   }
 
   Future<List<ImportCandidate>> scanFolder(
@@ -97,7 +119,7 @@ class CameraImportService {
     final dir = Directory(dirPath);
     if (!await dir.exists()) return [];
 
-    final known = _knownFiles.putIfAbsent(gallery.id, () => {});
+    final imported = _importedPaths.putIfAbsent(gallery.id, () => {});
     final existingPaths = gallery.images
         .map((i) => i.localPath)
         .whereType<String>()
@@ -111,7 +133,7 @@ class CameraImportService {
       if (p.basename(path).startsWith('.')) continue;
       if (p.basename(path).startsWith('_')) continue;
       if (existingPaths.contains(path)) continue;
-      if (onlyNew && known.contains(path)) continue;
+      if (onlyNew && imported.contains(path)) continue;
       if (!_matchesDownloadFormat(config.downloadFormat, path)) continue;
 
       final stars = await ratingForPath(path);
@@ -119,7 +141,6 @@ class CameraImportService {
         continue;
       }
 
-      known.add(path);
       results.add(
         ImportCandidate(
           sourcePath: path,
@@ -178,29 +199,55 @@ class CameraImportService {
               '${p.basenameWithoutExtension(c.fileName)}_${DateTime.now().millisecondsSinceEpoch}$ext';
           final alt = p.join(folder, stamped);
           await File(c.sourcePath).copy(alt);
-          imported.add(_imageFromPath(alt, stamped, c.starRating));
+          imported.add(_imageFromPath(
+            alt,
+            stamped,
+            c.starRating,
+            thumbPath: c.thumbPath,
+            colorLabel: c.colorLabel,
+          ));
         } else {
           await File(c.sourcePath).copy(destPath);
-          imported.add(_imageFromPath(destPath, c.fileName, c.starRating));
+          imported.add(_imageFromPath(
+            destPath,
+            c.fileName,
+            c.starRating,
+            thumbPath: c.thumbPath,
+            colorLabel: c.colorLabel,
+          ));
         }
       } else {
-        imported.add(_imageFromPath(destPath, c.fileName, c.starRating));
+        imported.add(_imageFromPath(
+          destPath,
+          c.fileName,
+          c.starRating,
+          thumbPath: c.thumbPath,
+          colorLabel: c.colorLabel,
+        ));
       }
-      _knownFiles
-          .putIfAbsent(gallery.id, () => {})
-          .add(imported.last.localPath!);
+      final path = imported.last.localPath;
+      if (path != null) {
+        markImported(gallery.id, [path]);
+      }
     }
     return imported;
   }
 
-  GalleryImage _imageFromPath(String path, String fileName, int stars) {
+  GalleryImage _imageFromPath(
+    String path,
+    String fileName,
+    int stars, {
+    String? thumbPath,
+    ImageColorLabel colorLabel = ImageColorLabel.none,
+  }) {
     return GalleryImage(
       id: _uuid.v4(),
       fileName: fileName,
       localPath: path,
-      thumbPath: JpgProcessor.isJpegPath(path) ? path : null,
+      thumbPath: thumbPath ?? (JpgProcessor.isJpegPath(path) ? path : null),
       starRating: stars,
       uploadStatus: UploadStatus.pending,
+      colorLabel: colorLabel,
     );
   }
 

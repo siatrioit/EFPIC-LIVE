@@ -40,12 +40,17 @@ class Gallery {
         webGalleryUrl: json['webGalleryUrl'] as String?,
       );
 
-  Gallery copyWith({List<GalleryImage>? images}) => Gallery(
+  Gallery copyWith({
+    List<GalleryImage>? images,
+    EventConfig? config,
+    String? webGalleryUrl,
+  }) =>
+      Gallery(
         id: id,
-        config: config,
+        config: config ?? this.config,
         createdAt: createdAt,
         images: images ?? this.images,
         folderPath: folderPath,
-        webGalleryUrl: webGalleryUrl,
+        webGalleryUrl: webGalleryUrl ?? this.webGalleryUrl,
       );
 }

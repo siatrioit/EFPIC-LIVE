@@ -87,6 +87,15 @@ class AlertService {
     }
   }
 
+  Future<void> notifyCameraUsb({
+    required String title,
+    required String body,
+  }) async {
+    if (!await AppSettings.instance.alertsEnabled()) return;
+    await _vibrateShort();
+    await _show(id: 4, title: title, body: body);
+  }
+
   Future<void> notifyUploadsComplete(String galleryName) async {
     if (!await AppSettings.instance.alertsEnabled()) return;
     await _vibrateShort();

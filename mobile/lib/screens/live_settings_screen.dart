@@ -5,14 +5,22 @@ import '../models/delivery_target.dart';
 import '../models/event_config.dart';
 import '../models/file_format.dart';
 import '../models/ftp_preset.dart';
+import '../models/gallery.dart';
+import '../models/import_policy.dart';
 import '../widgets/delivery_fields.dart';
+import '../widgets/download_filter_section.dart';
 import '../widgets/section_card.dart';
 import 'gallery_screen.dart';
 
 class LiveSettingsScreen extends StatefulWidget {
-  const LiveSettingsScreen({super.key, required this.draft});
+  const LiveSettingsScreen({
+    super.key,
+    required this.draft,
+    this.existingGallery,
+  });
 
   final EventConfig draft;
+  final Gallery? existingGallery;
 
   @override
   State<LiveSettingsScreen> createState() => _LiveSettingsScreenState();
@@ -29,7 +37,10 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
   bool _useOneOff = false;
   late OneOffFtpConfig _oneOff;
   late bool _autoFtp;
+  late ImportPolicy _importPolicy;
   bool _saving = false;
+
+  bool get _isEdit => widget.existingGallery != null;
 
   @override
   void initState() {
@@ -37,7 +48,7 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
     final d = widget.draft;
     _format = d.downloadFormat;
     _allImages = d.downloadAllImages;
-    _minStars = d.minStarRating;
+    _minStars = d.minStarRating < 1 ? 1 : d.minStarRating.clamp(1, 5);
     _jpgQuality = d.jpgQuality;
     _jpgMaxEdge = d.jpgMaxLongEdge;
     _target = d.deliveryTarget;
@@ -45,42 +56,88 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
     _oneOff = d.oneOffFtp ?? OneOffFtpConfig();
     _useOneOff = d.oneOffFtp != null && d.ftpPresetId == null;
     _autoFtp = d.autoSendToFtp;
+    _importPolicy = d.importPolicy;
   }
 
-  Future<void> _create() async {
+  EventConfig _buildConfig() => EventConfig(
+        name: widget.draft.name,
+        mode: widget.draft.mode,
+        downloadFormat: _format,
+        minStarRating: _allImages ? 0 : _minStars,
+        downloadAllImages: _allImages,
+        jpgQuality: _jpgQuality,
+        jpgMaxLongEdge: _jpgMaxEdge,
+        deliveryTarget: _target,
+        ftpPresetId: _useOneOff ? null : _presetId,
+        oneOffFtp: _useOneOff ? _oneOff : null,
+        autoSendToFtp: _autoFtp,
+        importPolicy: _importPolicy,
+      );
+
+  Future<void> _save() async {
     setState(() => _saving = true);
-    final config = EventConfig(
-      name: widget.draft.name,
-      mode: widget.draft.mode,
-      downloadFormat: _format,
-      minStarRating: _allImages ? 0 : _minStars,
-      downloadAllImages: _allImages,
-      jpgQuality: _jpgQuality,
-      jpgMaxLongEdge: _jpgMaxEdge,
-      deliveryTarget: _target,
-      ftpPresetId: _useOneOff ? null : _presetId,
-      oneOffFtp: _useOneOff ? _oneOff : null,
-      autoSendToFtp: _autoFtp,
-    );
+    try {
+      final config = _buildConfig();
+      if (_isEdit) {
+        await AppRepository.instance.updateGalleryConfig(
+          widget.existingGallery!.id,
+          config,
+        );
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        return;
+      }
 
-    final gallery = await AppRepository.instance.createGallery(config);
-    if (!mounted) return;
-
-    await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => GalleryScreen(galleryId: gallery.id)),
-      (route) => route.isFirst,
-    );
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
+      final gallery = await AppRepository.instance.createGallery(config);
+      if (!mounted) return;
+      await Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => GalleryScreen(galleryId: gallery.id)),
+        (route) => route.isFirst,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Live — ${widget.draft.name}')),
+      appBar: AppBar(
+        title: Text(
+          _isEdit
+              ? 'Iestatījumi — ${widget.draft.name}'
+              : 'Live — ${widget.draft.name}',
+        ),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset + 72),
         children: [
+          SectionCard(
+            title: 'Live — mapes uzraudzība',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Telefons ik pēc dažām sekundēm pārbauda galerijas mapi '
+                  'un pievieno jaunās bildes (USB kopēšana, MTP u.c.).',
+                ),
+                const SizedBox(height: 12),
+                ...ImportPolicy.values.map(
+                  (p) => RadioListTile<ImportPolicy>(
+                    value: p,
+                    title: Text(p.label),
+                    subtitle: p == ImportPolicy.always
+                        ? const Text('Ieteicams Live režīmam')
+                        : null,
+                    groupValue: _importPolicy,
+                    onChanged: (v) => setState(() => _importPolicy = v!),
+                  ),
+                ),
+              ],
+            ),
+          ),
           SectionCard(
             title: 'Lejupielāde no kameras',
             child: Column(
@@ -100,32 +157,15 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
                       setState(() => _format = s.first),
                 ),
                 const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Visas bildes'),
-                  subtitle: const Text('Izslēdz, lai ņemtu tikai pēc zvaigznēm'),
-                  value: _allImages,
-                  onChanged: (v) => setState(() => _allImages = v),
+                DownloadFilterSection(
+                  allImages: _allImages,
+                  minStars: _minStars,
+                  onAllImagesChanged: (v) => setState(() {
+                    _allImages = v;
+                    if (!v && _minStars < 1) _minStars = 1;
+                  }),
+                  onMinStarsChanged: (v) => setState(() => _minStars = v),
                 ),
-                if (!_allImages) ...[
-                  Row(
-                    children: [
-                      const Text('Min. zvaigznes:'),
-                      Expanded(
-                        child: Slider(
-                          value: _minStars.toDouble(),
-                          min: 1,
-                          max: 5,
-                          divisions: 4,
-                          label: '$_minStars',
-                          onChanged: (v) =>
-                              setState(() => _minStars = v.round()),
-                        ),
-                      ),
-                      Text('$_minStars★'),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
@@ -150,23 +190,30 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Automātiski sūtīt uz FTP'),
-              subtitle: const Text('Pēc lejupielādes (vēlāk — īsta integrācija)'),
               value: _autoFtp,
               onChanged: (v) => setState(() => _autoFtp = v),
             ),
           ),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _saving ? null : _create,
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton(
+            onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(
-                    height: 20,
-                    width: 20,
+                    height: 22,
+                    width: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Izveidot galeriju un mapi'),
+                : Text(
+                    _isEdit
+                        ? 'Saglabāt iestatījumus'
+                        : 'Izveidot galeriju un mapi',
+                  ),
           ),
-        ],
+        ),
       ),
     );
   }

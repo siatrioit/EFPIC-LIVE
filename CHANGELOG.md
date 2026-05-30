@@ -2,6 +2,44 @@
 
 Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/pubspec.yaml`.
 
+Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
+
+## [0.3.4] — 2026-05-29
+
+### Labots
+- RAW priekšskatījums: izmanto lielāko iegulto JPEG, nevis mazu Exif sīktēlu; mazi `_emb.jpg` tiek pārģenerēti
+- Orientācija: lasīšana arī no RAW avota, ja thumb nav EXIF; skatītājs izmanto `OrientedImageFile` visur
+- Bilžu skatītājā atjaunotas pogas rediģēšanai, reitingam un krāsas atzīmei (bija kodā, bet UI pazudis)
+
+### Piezīme
+- Izmaiņu žurnāls lietotnē (`changelog_entries.dart`) atjaunināts līdz 0.3.x
+
+## [0.3.3] — 2026-05-29
+
+### Labots
+- Lielāki galerijas sīktēli (2 kolonnas, augstāka cache izšķirtspēja)
+- EXIF orientācijas korekcija (`OrientedImageFile`)
+
+## [0.3.2] — 2026-05-29
+
+### Labots
+- Live imports bez bloķējoša RAW dialoga; RAW preview rinda
+- Galeriju atjaunošana no diska
+
+## [0.3.1] — 2026-05-29
+
+### Labots
+- Live galerijas izveides kļūda (`importPolicy`)
+
+## [0.3.0] — 2026-05-29
+
+### Pievienots
+- Tumšā/gaišā tēma, lietotnes iestatījumi
+- Galerija: multi-select, filtri (zvaigznes, krāsas)
+- Bilžu rediģēšana (preseti, gaišums/kontrasts, apgriešana, pagriešana)
+- Krāsu atzīmes, USB lejupielāde pēc krāsas
+- RAW iegulto JPG priekšskatījums
+
 ## [0.2.1] — 2026-05-29
 
 ### Pievienots

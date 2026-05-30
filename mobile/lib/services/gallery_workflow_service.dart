@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../data/app_repository.dart';
 import '../models/delivery_target.dart';
 import '../models/gallery.dart';
@@ -24,13 +26,17 @@ class GalleryWorkflowService {
 
     if (gallery.config.autoSendToFtp &&
         gallery.config.deliveryTarget == DeliveryTargetType.ftp) {
-      for (final img in added) {
-        if (img.uploadStatus != UploadStatus.excluded) {
-          updated = await uploadImage(updated, img.id);
-        }
-      }
+      unawaited(_autoFtpAdded(added));
     }
     return updated;
+  }
+
+  Future<void> _autoFtpAdded(List<GalleryImage> added) async {
+    var working = gallery;
+    for (final img in added) {
+      if (img.uploadStatus == UploadStatus.excluded) continue;
+      working = await uploadImage(working, img.id);
+    }
   }
 
   Future<Gallery> uploadImage(Gallery current, String imageId) async {

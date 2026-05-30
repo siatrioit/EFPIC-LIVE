@@ -5,7 +5,13 @@ import 'package:flutter/material.dart';
 import '../models/delivery_target.dart';
 import '../models/gallery.dart';
 import '../models/gallery_image.dart';
+import '../models/image_color_label.dart';
 import '../services/gallery_workflow_service.dart';
+import '../services/raw_preview_service.dart';
+import '../utils/image_paths.dart';
+import '../widgets/oriented_image_file.dart';
+import '../widgets/star_rating_picker.dart';
+import 'image_edit_screen.dart';
 
 class ImageViewerScreen extends StatefulWidget {
   const ImageViewerScreen({
@@ -29,6 +35,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   late int _index;
   late GalleryWorkflowService _workflow;
   bool _uploading = false;
+  final Map<String, String> _rawPreviewCache = {};
 
   @override
   void initState() {
@@ -92,6 +99,67 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     });
   }
 
+  Future<void> _editRating() async {
+    var rating = _images[_index].starRating;
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Zvaigznes'),
+          content: StarRatingPicker(
+            value: rating == 0 ? 1 : rating,
+            onChanged: (v) => setLocal(() => rating = v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 0),
+              child: const Text('Noņemt'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, rating),
+              child: const Text('Saglabāt'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    _updateImage(_images[_index].copyWith(starRating: result));
+  }
+
+  Future<void> _editColor() async {
+    final color = await showDialog<ImageColorLabel>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Krāsu atzīme'),
+        children: ImageColorLabel.values
+            .map(
+              (c) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, c),
+                child: Text(c.label),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (color == null) return;
+    _updateImage(_images[_index].copyWith(colorLabel: color));
+  }
+
+  Future<void> _openEdit() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ImageEditScreen(
+          images: _images,
+          initialIndex: _index,
+        ),
+      ),
+    );
+    if (result != null) {
+      _updateImage(_images[_index].copyWith(localPath: result));
+    }
+  }
+
   void _markExcluded() {
     _updateImage(
       _images[_index].copyWith(uploadStatus: UploadStatus.excluded),
@@ -138,25 +206,105 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
 
   Widget _imageContent(GalleryImage item) {
     final path = item.localPath;
-    if (path != null && File(path).existsSync()) {
+    final preview = item.thumbPath ?? _rawPreviewCache[item.id];
+
+    final orientSource =
+        path != null && ImagePaths.isRaw(path) ? path : null;
+
+    if (path != null && ImagePaths.isPreviewable(path) && File(path).existsSync()) {
       return InteractiveViewer(
-        child: Image.file(
-          File(path),
+        child: OrientedImageFile(
+          path: path,
+          orientationSource: orientSource,
           fit: BoxFit.contain,
-          errorBuilder: (_, e, st) => _placeholder(item),
+          cacheWidth: 4096,
+          cacheHeight: 4096,
         ),
       );
     }
+
+    if (preview != null && File(preview).existsSync()) {
+      return InteractiveViewer(
+        child: OrientedImageFile(
+          path: preview,
+          orientationSource: orientSource,
+          fit: BoxFit.contain,
+          cacheWidth: 4096,
+          cacheHeight: 4096,
+        ),
+      );
+    }
+
+    if (path != null &&
+        ImagePaths.isRaw(path) &&
+        widget.gallery.folderPath != null) {
+      return FutureBuilder<String?>(
+        future: RawPreviewService.instance.extractEmbeddedJpeg(
+          rawPath: path,
+          galleryFolder: widget.gallery.folderPath!,
+        ),
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white54),
+            );
+          }
+          final thumb = snap.data;
+          if (thumb != null && File(thumb).existsSync()) {
+            _rawPreviewCache[item.id] = thumb;
+            return InteractiveViewer(
+              child: OrientedImageFile(
+                path: thumb,
+                fit: BoxFit.contain,
+                cacheWidth: 2048,
+                cacheHeight: 2048,
+              ),
+            );
+          }
+          return _placeholder(item);
+        },
+      );
+    }
+
     return _placeholder(item);
   }
 
   Widget _placeholder(GalleryImage item) {
+    final path = item.localPath;
+    final isRaw = ImagePaths.isRaw(path ?? item.fileName);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.photo_size_select_large, size: 120, color: Colors.grey.shade600),
+        Icon(
+          isRaw ? Icons.raw_on : Icons.photo_size_select_large,
+          size: 120,
+          color: Colors.grey.shade600,
+        ),
         const SizedBox(height: 16),
         Text(item.fileName, style: const TextStyle(color: Colors.white70)),
+        if (isRaw)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'RAW — rāda iegulto JPG priekšskatījumu',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+          ),
+        if (path != null)
+          FutureBuilder<int>(
+            future: File(path).length(),
+            builder: (context, snap) {
+              if (!snap.hasData) return const SizedBox.shrink();
+              final mb = snap.data! / (1024 * 1024);
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${mb.toStringAsFixed(1)} MB',
+                  style: const TextStyle(color: Colors.white38),
+                ),
+              );
+            },
+          ),
       ],
     );
   }
@@ -220,27 +368,64 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
             return Center(child: _imageContent(_images[i]));
           },
         ),
-        bottomNavigationBar: img.uploadStatus == UploadStatus.excluded
-            ? const SafeArea(
-                child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Text(
-                    'Šī bilde netiks sūtīta uz FTP',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54),
-                  ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.tune),
+                      tooltip: 'Apstrādāt bildi',
+                      color: Colors.white,
+                      onPressed: _openEdit,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        img.starRating > 0
+                            ? Icons.star
+                            : Icons.star_border,
+                        color: Colors.amber,
+                      ),
+                      tooltip: 'Reitings',
+                      onPressed: _editRating,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.label,
+                        color: img.colorLabel != ImageColorLabel.none
+                            ? img.colorLabel.color
+                            : Colors.white54,
+                      ),
+                      tooltip: 'Krāsu atzīme',
+                      onPressed: _editColor,
+                    ),
+                  ],
                 ),
-              )
-            : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(
-                    img.uploadStatus.label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54),
+                if (img.starRating > 0)
+                  Text(
+                    '★' * img.starRating,
+                    style: const TextStyle(color: Colors.amber, fontSize: 16),
                   ),
+                if (img.colorLabel != ImageColorLabel.none)
+                  Text(
+                    img.colorLabel.label,
+                    style: TextStyle(color: img.colorLabel.color),
+                  ),
+                Text(
+                  img.uploadStatus == UploadStatus.excluded
+                      ? 'Šī bilde netiks sūtīta uz FTP'
+                      : img.uploadStatus.label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white54),
                 ),
-              ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

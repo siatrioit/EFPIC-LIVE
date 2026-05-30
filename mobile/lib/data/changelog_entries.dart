@@ -1,4 +1,8 @@
 /// In-app changelog — uzturi sinhronizētu ar [CHANGELOG.md] repozitorijā.
+///
+/// Katrai jaunai versijai `pubspec.yaml`:
+/// 1. Pievieno ierakstu šeit (jaunākais augšā).
+/// 2. Atjaunini `CHANGELOG.md` repozitorijā.
 class ChangelogEntry {
   const ChangelogEntry({
     required this.version,
@@ -14,6 +18,58 @@ class ChangelogEntry {
 }
 
 const appChangelog = <ChangelogEntry>[
+  ChangelogEntry(
+    version: '0.3.4',
+    date: '2026-05-29',
+    summary: 'Priekšskatījumu kvalitāte, orientācija, rediģēšana',
+    items: [
+      'RAW priekšskatījums: lielākais iegultais JPEG (nevis mazs Exif sīktēls)',
+      'Mazi vecie _emb.jpg tiek pārģenerēti automātiski',
+      'Vertikālas bildes: orientācija no RAW/JPEG EXIF galerijā un skatītājā',
+      'Bilžu skatītājā atjaunotas pogas: apstrāde, reitings, krāsa',
+      'Izmaiņu žurnāls atjaunināts līdz 0.3.x',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.3',
+    date: '2026-05-29',
+    summary: 'Lielāki sīktēli, EXIF pagriešana',
+    items: [
+      'Galerijas režģis: 2 kolonnas, lielāka thumb izšķirtspēja',
+      'OrientedImageFile — EXIF orientācijas korekcija',
+      'RAW thumb: orientācijas pārnešana no NEF uz _emb.jpg',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.2',
+    date: '2026-05-29',
+    summary: 'Imports un RAW rinda',
+    items: [
+      'Live imports: viena snackbar, bez bloķējoša RAW dialoga',
+      'RAW priekšskatījumu rinda (RawPreviewQueue)',
+      'Galeriju atjaunošana no diska (↻)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.1',
+    date: '2026-05-29',
+    summary: 'Live iestatījumu kļūda',
+    items: [
+      'Labots Live galerijas izveides crashes (importPolicy)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.0',
+    date: '2026-05-29',
+    summary: 'Liela funkciju partija',
+    items: [
+      'Tumšā/gaišā tēma, lietotnes iestatījumi',
+      'Galerija: multi-select, filtri (zvaigznes, krāsas)',
+      'Bilžu rediģēšana: preseti, gaišums/kontrasts, apgriešana, pagriešana',
+      'Krāsu atzīmes (Lightroom stilā), USB lejupielāde pēc krāsas',
+      'RAW iegulto JPG priekšskatījumu izvilkšana',
+    ],
+  ),
   ChangelogEntry(
     version: '0.2.1',
     date: '2026-05-29',
@@ -47,5 +103,5 @@ const appChangelog = <ChangelogEntry>[
   ),
 ];
 
-/// Jāatbilst `pubspec.yaml` major.minor.patch daļai.
-const String appVersionLabel = '0.2.1';
+/// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
+const String appVersionLabel = '0.3.4';
