@@ -122,6 +122,31 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
         padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset + 72),
         children: [
           SectionCard(
+            title: 'Importēt pēc reitinga (EXIF)',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Attiecas uz mapes skenēšanu un lejupielādi no kameras. '
+                  'Nikon/JPG reitings jābūt ierakstīts failā.',
+                ),
+                const SizedBox(height: 12),
+                DownloadFilterSection(
+                  allImages: _allImages,
+                  allowedStars: _allowedStars,
+                  onAllImagesChanged: (v) => setState(() {
+                    _allImages = v;
+                    if (!v && _allowedStars.isEmpty) {
+                      _allowedStars = {3, 4, 5};
+                    }
+                  }),
+                  onAllowedStarsChanged: (s) =>
+                      setState(() => _allowedStars = s),
+                ),
+              ],
+            ),
+          ),
+          SectionCard(
             title: 'Live — mapes uzraudzība',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -162,19 +187,6 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
                   selected: {_format},
                   onSelectionChanged: (s) =>
                       setState(() => _format = s.first),
-                ),
-                const SizedBox(height: 16),
-                DownloadFilterSection(
-                  allImages: _allImages,
-                  allowedStars: _allowedStars,
-                  onAllImagesChanged: (v) => setState(() {
-                    _allImages = v;
-                    if (!v && _allowedStars.isEmpty) {
-                      _allowedStars = {3, 4, 5};
-                    }
-                  }),
-                  onAllowedStarsChanged: (s) =>
-                      setState(() => _allowedStars = s),
                 ),
               ],
             ),

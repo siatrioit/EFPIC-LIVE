@@ -8,6 +8,7 @@ class EditPreset {
     this.temperature = 0,
     this.tint = 0,
     this.shadows = 0,
+    this.highlights = 0,
     this.rotationDegrees = 0,
     this.cropAspect,
   });
@@ -25,6 +26,8 @@ class EditPreset {
   final double tint;
   /// Ēnu pacelšana (-1 … 1).
   final double shadows;
+  /// Spilgtumi (-1 … 1).
+  final double highlights;
   final int rotationDegrees;
   final double? cropAspect;
 
@@ -37,6 +40,7 @@ class EditPreset {
         'temperature': temperature,
         'tint': tint,
         'shadows': shadows,
+        'highlights': highlights,
         'rotationDegrees': rotationDegrees,
         'cropAspect': cropAspect,
       };
@@ -52,6 +56,7 @@ class EditPreset {
       temperature: (json['temperature'] as num?)?.toDouble() ?? warmthLegacy,
       tint: (json['tint'] as num?)?.toDouble() ?? 0,
       shadows: (json['shadows'] as num?)?.toDouble() ?? 0,
+      highlights: (json['highlights'] as num?)?.toDouble() ?? 0,
       rotationDegrees: (json['rotationDegrees'] as num?)?.toInt() ?? 0,
       cropAspect: (json['cropAspect'] as num?)?.toDouble(),
     );
@@ -65,6 +70,7 @@ class EditPreset {
     double? temperature,
     double? tint,
     double? shadows,
+    double? highlights,
     int? rotationDegrees,
     double? cropAspect,
     bool clearCropAspect = false,
@@ -78,6 +84,7 @@ class EditPreset {
         temperature: temperature ?? this.temperature,
         tint: tint ?? this.tint,
         shadows: shadows ?? this.shadows,
+        highlights: highlights ?? this.highlights,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
         cropAspect: clearCropAspect ? null : (cropAspect ?? this.cropAspect),
       );

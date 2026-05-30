@@ -11,6 +11,7 @@ import '../services/raw_preview_service.dart';
 import '../utils/image_paths.dart';
 import '../widgets/oriented_image_file.dart';
 import '../widgets/star_rating_picker.dart';
+import '../widgets/image_info_sheet.dart';
 import 'image_edit_screen.dart';
 
 class ImageViewerScreen extends StatefulWidget {
@@ -399,6 +400,14 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                     : 'Nesūtīt uz FTP',
                 onPressed: _toggleFtpExcluded,
               ),
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'Bildes dati',
+              onPressed: () => showImageInfoSheet(
+                context,
+                image: img,
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: _confirmDelete,

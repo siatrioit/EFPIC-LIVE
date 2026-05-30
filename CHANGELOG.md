@@ -4,6 +4,24 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.17] — 2026-05-30
+
+### Pievienots
+- Bilžu skatītājs: **Info** poga (EXIF, izmērs, formāts, ceļš)
+- Galerijas režģis: **RAW** / **JPG** uzlīme uz katras sīktēla
+
+## [0.3.16] — 2026-05-30
+
+### Labots (Live, Download)
+- Galerijas iestatījumi: atsevišķa sadaļa **Importēt pēc reitinga** (★1–★5)
+- Apstrāde: vertikālais priekšskatījums; pārkadrēšana (velkams rāmis); pagrieziens ±45° + režģis + Constrain crop
+- Katram rīkam: **Atiestatīt šo režīmu**
+
+## [0.3.15] — 2026-05-30
+
+### Pievienots
+- Bilžu apstrāde: **Spilgtumi** (Highlights) aiz kontrasta
+
 ## [0.3.14] — 2026-05-30
 
 ### Labots / pievienots (Live, Download)

@@ -78,7 +78,8 @@ class EditPresetRepository {
       temperature: params.temperature,
       tint: params.tint,
       shadows: params.shadows,
-      rotationDegrees: params.rotationDegrees,
+      highlights: params.highlights,
+      rotationDegrees: params.rotationDegrees.round(),
       cropAspect: params.cropAspect,
     );
     await add(preset);

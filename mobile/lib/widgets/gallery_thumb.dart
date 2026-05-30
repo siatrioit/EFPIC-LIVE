@@ -7,6 +7,8 @@ import '../services/raw_preview_queue.dart';
 import '../services/raw_preview_service.dart';
 import '../utils/image_orientation.dart';
 import '../utils/image_paths.dart';
+import '../services/image_info_service.dart';
+import 'image_format_badge.dart';
 import 'oriented_image_file.dart';
 
 /// Thumbnail ar iegultā JPG izvilkšanu RAW failiem.
@@ -123,21 +125,42 @@ class _GalleryThumbState extends State<GalleryThumb> {
     );
   }
 
+  String get _formatLabel {
+    final path = widget.image.localPath ?? widget.image.fileName;
+    return ImageInfoService.formatLabelForPath(path);
+  }
+
+  Widget _withFormatBadge(Widget child) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Positioned(
+          left: 4,
+          bottom: 4,
+          child: ImageFormatBadge(label: _formatLabel),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final thumb = _resolvedThumb ?? widget.image.thumbPath;
     if (RawPreviewService.isUsableThumb(thumb)) {
-      return _image(thumb!);
+      return _withFormatBadge(_image(thumb!));
     }
 
     final path = widget.image.localPath;
     if (ImagePaths.isPreviewable(path) && path != null && File(path).existsSync()) {
-      return _image(path);
+      return _withFormatBadge(_image(path));
     }
     if (_extracting && ImagePaths.isRaw(widget.image.localPath ?? '')) {
-      return _RawOrGenericPlaceholder(image: widget.image, extracting: true);
+      return _withFormatBadge(
+        _RawOrGenericPlaceholder(image: widget.image, extracting: true),
+      );
     }
-    return _RawOrGenericPlaceholder(image: widget.image);
+    return _withFormatBadge(_RawOrGenericPlaceholder(image: widget.image));
   }
 }
 

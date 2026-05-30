@@ -16,7 +16,9 @@ class ImageEditParams {
     this.temperature = 0,
     this.tint = 0,
     this.shadows = 0,
+    this.highlights = 0,
     this.rotationDegrees = 0,
+    this.constrainAfterRotate = true,
     this.cropAspect,
     this.cropLockAspect = true,
     this.customAspect,
@@ -32,7 +34,10 @@ class ImageEditParams {
   final double temperature;
   final double tint;
   final double shadows;
-  final int rotationDegrees;
+  final double highlights;
+  final double rotationDegrees;
+  /// Pēc pagriešanas apgriezt tukšās malas (Lightroom constrain).
+  final bool constrainAfterRotate;
   final double? cropAspect;
   /// true = centrālais izgriezums pēc [cropAspect]; false = brīva malu attiecība.
   final bool cropLockAspect;
@@ -50,7 +55,8 @@ class ImageEditParams {
         temperature: preset.temperature,
         tint: preset.tint,
         shadows: preset.shadows,
-        rotationDegrees: preset.rotationDegrees,
+        highlights: preset.highlights,
+        rotationDegrees: preset.rotationDegrees.toDouble(),
         cropAspect: preset.cropAspect,
       );
 
@@ -61,7 +67,9 @@ class ImageEditParams {
     double? temperature,
     double? tint,
     double? shadows,
-    int? rotationDegrees,
+    double? highlights,
+    double? rotationDegrees,
+    bool? constrainAfterRotate,
     double? cropAspect,
     bool clearCropAspect = false,
     bool? cropLockAspect,
@@ -79,7 +87,10 @@ class ImageEditParams {
         temperature: temperature ?? this.temperature,
         tint: tint ?? this.tint,
         shadows: shadows ?? this.shadows,
+        highlights: highlights ?? this.highlights,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+        constrainAfterRotate:
+            constrainAfterRotate ?? this.constrainAfterRotate,
         cropAspect: clearCropAspect ? null : (cropAspect ?? this.cropAspect),
         cropLockAspect: cropLockAspect ?? this.cropLockAspect,
         customAspect:
@@ -99,9 +110,22 @@ class ImageEditParams {
         temperature: temperature,
         tint: tint,
         shadows: shadows,
-        rotationDegrees: rotationDegrees,
+        highlights: highlights,
+        rotationDegrees: rotationDegrees.round(),
         cropAspect: cropAspect,
       );
+}
+
+class ImagePreviewResult {
+  const ImagePreviewResult({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
 }
 
 class ImageEditService {
@@ -121,8 +145,20 @@ class ImageEditService {
     return null;
   }
 
-  /// Priekšskatījumam — samazināts + apstrāde.
-  Future<Uint8List?> renderPreviewBytes({
+  Future<ImagePreviewResult?> loadOrientedBase(String sourcePath) async {
+    final bytes = await File(sourcePath).readAsBytes();
+    var image = img.decodeImage(bytes);
+    if (image == null) return null;
+    image = img.bakeOrientation(image);
+    image = _resizeLongEdge(image, previewMaxLongEdge);
+    return ImagePreviewResult(
+      bytes: Uint8List.fromList(img.encodeJpg(image, quality: 90)),
+      width: image.width,
+      height: image.height,
+    );
+  }
+
+  Future<ImagePreviewResult?> renderPreview({
     required String sourcePath,
     required ImageEditParams params,
   }) async {
@@ -134,17 +170,25 @@ class ImageEditService {
     image = _resizeLongEdge(image, previewMaxLongEdge);
     image = applyGeometry(image, params);
     image = process(image, params);
-    return Uint8List.fromList(img.encodeJpg(image, quality: 88));
+    return ImagePreviewResult(
+      bytes: Uint8List.fromList(img.encodeJpg(image, quality: 88)),
+      width: image.width,
+      height: image.height,
+    );
   }
 
   /// Orientācija + pagrieziens + izgriešana (priekšskatījumam un saglabāšanai).
   img.Image applyGeometry(img.Image image, ImageEditParams p) {
     var out = image;
     if (p.rotationDegrees != 0) {
-      out = img.copyRotate(out, angle: p.rotationDegrees);
+      out = _rotate(out, p.rotationDegrees, p.constrainAfterRotate);
     }
 
-    if (p.cropWidth < 0.999 || p.cropHeight < 0.999) {
+    final hasManualCrop = p.cropWidth < 0.995 ||
+        p.cropHeight < 0.995 ||
+        p.cropLeft > 0.005 ||
+        p.cropTop > 0.005;
+    if (hasManualCrop) {
       final x =
           (out.width * p.cropLeft).round().clamp(0, out.width - 1);
       final y =
@@ -201,6 +245,9 @@ class ImageEditService {
     }
     if (p.shadows != 0) {
       out = _applyShadows(out, p.shadows);
+    }
+    if (p.highlights != 0) {
+      out = _applyHighlights(out, p.highlights);
     }
     if (p.brightness != 0 || p.contrast != 1) {
       out = _applyBrightnessContrast(out, p.brightness, p.contrast);
@@ -298,6 +345,36 @@ class ImageEditService {
     return out;
   }
 
+  /// Spilgtās zonas: + vērtība atgūst izgaismojumus (tumšina), − pastiprina.
+  img.Image _applyHighlights(img.Image src, double highlights) {
+    final out = img.Image.from(src);
+    final amount = highlights.clamp(-1.0, 1.0);
+    if (amount == 0) return out;
+
+    final maxChange = amount * 72;
+
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final c = src.getPixel(x, y);
+        final r = c.r.toDouble();
+        final g = c.g.toDouble();
+        final b = c.b.toDouble();
+        final luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        final weight = math.pow(luma, 1.8).toDouble();
+        final delta = -maxChange * weight;
+        out.setPixelRgba(
+          x,
+          y,
+          (r + delta).round().clamp(0, 255),
+          (g + delta).round().clamp(0, 255),
+          (b + delta).round().clamp(0, 255),
+          c.a.round().clamp(0, 255),
+        );
+      }
+    }
+    return out;
+  }
+
   img.Image _resizeLongEdge(img.Image image, int maxEdge) {
     final long = math.max(image.width, image.height);
     if (long <= maxEdge) return image;
@@ -349,9 +426,46 @@ class ImageEditService {
     'Facebook 16:9': 16 / 9,
   };
 
-  static int normalizeRotation(int degrees) {
-    final d = degrees % 360;
-    return d < 0 ? d + 360 : d;
+  img.Image _rotate(img.Image src, double angle, bool constrain) {
+    if (angle == 0) return src;
+    var out = img.copyRotate(src, angle: angle);
+    if (constrain) {
+      out = _trimEmptyMargins(out);
+    }
+    return out;
+  }
+
+  img.Image _trimEmptyMargins(img.Image src) {
+    var minX = src.width;
+    var minY = src.height;
+    var maxX = 0;
+    var maxY = 0;
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final c = src.getPixel(x, y);
+        final luma = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        if (luma > 14) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX <= minX || maxY <= minY) return src;
+    return img.copyCrop(
+      src,
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1,
+    );
+  }
+
+  static double normalizeRotation(double degrees) {
+    var d = degrees % 360;
+    if (d < 0) d += 360;
+    return d;
   }
 
   static double clamp01(double v) => math.max(0, math.min(1, v));

@@ -8,8 +8,17 @@ import '../models/edit_preset.dart';
 import '../models/gallery_image.dart';
 import '../services/edit_preset_repository.dart';
 import '../services/image_edit_service.dart';
+import '../widgets/image_edit_crop_canvas.dart';
 
-enum _EditTool { whiteBalance, brightness, contrast, shadows, crop, rotate }
+enum _EditTool {
+  whiteBalance,
+  brightness,
+  contrast,
+  highlights,
+  shadows,
+  crop,
+  rotate,
+}
 
 class ImageEditScreen extends StatefulWidget {
   const ImageEditScreen({
@@ -31,10 +40,13 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   String? _sourcePath;
   int? _orientedWidth;
   int? _orientedHeight;
+  Uint8List? _cropBaseBytes;
   bool _loading = true;
   bool _previewBusy = false;
   List<EditPreset> _presets = [];
   Uint8List? _previewBytes;
+  int? _previewWidth;
+  int? _previewHeight;
   Timer? _previewDebounce;
   int _previewGen = 0;
   _EditTool? _activeTool;
@@ -70,21 +82,22 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       thumbPath: img.thumbPath,
     );
     _previewBytes = null;
+    _cropBaseBytes = null;
     _orientedWidth = null;
     _orientedHeight = null;
     final src = _sourcePath;
     if (src != null) {
-      final dims = await ImageEditService.instance.orientedDimensions(src);
-      if (dims != null) {
-        _orientedWidth = dims.width;
-        _orientedHeight = dims.height;
+      final base = await ImageEditService.instance.loadOrientedBase(src);
+      if (base != null) {
+        _cropBaseBytes = base.bytes;
+        _orientedWidth = base.width;
+        _orientedHeight = base.height;
       }
     }
   }
 
   void _schedulePreview({bool immediate = false}) {
-    final src = _sourcePath;
-    if (src == null) return;
+    if (_sourcePath == null || _activeTool == _EditTool.crop) return;
 
     _previewDebounce?.cancel();
     if (immediate) {
@@ -102,25 +115,96 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     final gen = ++_previewGen;
     if (mounted) setState(() => _previewBusy = true);
 
-    final bytes = await ImageEditService.instance.renderPreviewBytes(
+    final result = await ImageEditService.instance.renderPreview(
       sourcePath: src,
       params: _params,
     );
 
     if (!mounted || gen != _previewGen) return;
     setState(() {
-      _previewBytes = bytes;
+      if (result != null) {
+        _previewBytes = result.bytes;
+        _previewWidth = result.width;
+        _previewHeight = result.height;
+      }
       _previewBusy = false;
     });
   }
 
-  void _updateParams(ImageEditParams next) {
+  void _updateParams(ImageEditParams next, {bool refreshPreview = true}) {
     setState(() => _params = next);
-    _schedulePreview();
+    if (refreshPreview) _schedulePreview();
   }
 
   void _selectTool(_EditTool tool) {
-    setState(() => _activeTool = _activeTool == tool ? null : tool);
+    final wasCrop = _activeTool == _EditTool.crop;
+    setState(() {
+      _activeTool = _activeTool == tool ? null : tool;
+    });
+    if (wasCrop && _activeTool != _EditTool.crop) {
+      _schedulePreview(immediate: true);
+    }
+  }
+
+  void _resetTool(_EditTool tool) {
+    switch (tool) {
+      case _EditTool.whiteBalance:
+        _updateParams(_params.copyWith(temperature: 0, tint: 0));
+      case _EditTool.brightness:
+        _updateParams(_params.copyWith(brightness: 0));
+      case _EditTool.contrast:
+        _updateParams(_params.copyWith(contrast: 1));
+      case _EditTool.highlights:
+        _updateParams(_params.copyWith(highlights: 0));
+      case _EditTool.shadows:
+        _updateParams(_params.copyWith(shadows: 0));
+      case _EditTool.crop:
+        _updateParams(
+          _params.copyWith(
+            clearCropAspect: true,
+            cropLockAspect: true,
+            cropLeft: 0,
+            cropTop: 0,
+            cropWidth: 1,
+            cropHeight: 1,
+            clearCustomAspect: true,
+          ),
+          refreshPreview: false,
+        );
+        _schedulePreview(immediate: true);
+      case _EditTool.rotate:
+        _updateParams(
+          _params.copyWith(rotationDegrees: 0, constrainAfterRotate: true),
+        );
+    }
+  }
+
+  void _applyAspectCrop(double aspect) {
+    final w = _orientedWidth ?? 1;
+    final h = _orientedHeight ?? 1;
+    final current = w / h;
+    double cw = 1;
+    double ch = 1;
+    double cl = 0;
+    double ct = 0;
+    if (current > aspect) {
+      cw = aspect / current;
+      cl = (1 - cw) / 2;
+    } else {
+      ch = current / aspect;
+      ct = (1 - ch) / 2;
+    }
+    _updateParams(
+      _params.copyWith(
+        cropAspect: aspect,
+        cropLockAspect: true,
+        cropLeft: cl,
+        cropTop: ct,
+        cropWidth: cw,
+        cropHeight: ch,
+      ),
+      refreshPreview: false,
+    );
   }
 
   void _autoHorizon() {
@@ -233,21 +317,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
                 )
               : Column(
                   children: [
-                    Expanded(
-                      child: InteractiveViewer(
-                        minScale: 0.5,
-                        maxScale: 4,
-                        child: Center(
-                          child: _previewBytes != null
-                              ? Image.memory(
-                                  _previewBytes!,
-                                  fit: BoxFit.contain,
-                                  gaplessPlayback: true,
-                                )
-                              : const CircularProgressIndicator(),
-                        ),
-                      ),
-                    ),
+                    Expanded(child: _previewArea()),
                     _toolbar(),
                     if (_activeTool != null) _toolPanel(),
                     _footerActions(),
@@ -256,44 +326,86 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     );
   }
 
+  Widget _previewArea() {
+    if (_activeTool == _EditTool.crop &&
+        _cropBaseBytes != null &&
+        _orientedWidth != null &&
+        _orientedHeight != null) {
+      return ImageEditCropCanvas(
+        imageBytes: _cropBaseBytes!,
+        imageWidth: _orientedWidth!,
+        imageHeight: _orientedHeight!,
+        cropLeft: _params.cropLeft,
+        cropTop: _params.cropTop,
+        cropWidth: _params.cropWidth,
+        cropHeight: _params.cropHeight,
+        lockAspect: _params.cropLockAspect,
+        aspectRatio: _params.cropAspect ?? _params.customAspect,
+        onCropChanged: (l, t, w, h) {
+          setState(() {
+            _params = _params.copyWith(
+              cropLeft: l,
+              cropTop: t,
+              cropWidth: w,
+              cropHeight: h,
+            );
+          });
+        },
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (_previewBytes == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final pw = (_previewWidth ?? 1).toDouble();
+            final ph = (_previewHeight ?? 1).toDouble();
+            final scale = (constraints.maxWidth / pw) < (constraints.maxHeight / ph)
+                ? constraints.maxWidth / pw
+                : constraints.maxHeight / ph;
+            final w = pw * scale;
+            final h = ph * scale;
+            return Center(
+              child: SizedBox(
+                width: w,
+                height: h,
+                child: Image.memory(
+                  _previewBytes!,
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                ),
+              ),
+            );
+          },
+        ),
+        if (_activeTool == _EditTool.rotate)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _RotateGridPainter()),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _toolbar() {
     return Material(
       elevation: 4,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _toolIcon(
-              _EditTool.whiteBalance,
-              Icons.wb_sunny_outlined,
-              'Balans',
-            ),
-            _toolIcon(
-              _EditTool.brightness,
-              Icons.brightness_6_outlined,
-              'Gaišums',
-            ),
-            _toolIcon(
-              _EditTool.contrast,
-              Icons.contrast,
-              'Kontrasts',
-            ),
-            _toolIcon(
-              _EditTool.shadows,
-              Icons.gradient_outlined,
-              'Ēnas',
-            ),
-            _toolIcon(
-              _EditTool.crop,
-              Icons.crop,
-              'Izmērs',
-            ),
-            _toolIcon(
-              _EditTool.rotate,
-              Icons.crop_rotate,
-              'Pagriezt',
-            ),
+            _toolIcon(_EditTool.whiteBalance, Icons.wb_sunny_outlined, 'Balans'),
+            _toolIcon(_EditTool.brightness, Icons.brightness_6_outlined, 'Gaiš.'),
+            _toolIcon(_EditTool.contrast, Icons.contrast, 'Kontr.'),
+            _toolIcon(_EditTool.highlights, Icons.wb_twilight_outlined, 'Spilgt.'),
+            _toolIcon(_EditTool.shadows, Icons.gradient_outlined, 'Ēnas'),
+            _toolIcon(_EditTool.crop, Icons.crop, 'Izmērs'),
+            _toolIcon(_EditTool.rotate, Icons.crop_rotate, 'Pagriezt'),
           ],
         ),
       ),
@@ -313,19 +425,18 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             children: [
               Icon(
                 icon,
+                size: 22,
                 color: selected
                     ? Theme.of(context).colorScheme.primary
                     : null,
               ),
-              const SizedBox(height: 2),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 10,
                       color: selected
                           ? Theme.of(context).colorScheme.primary
                           : null,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.normal,
                     ),
                 textAlign: TextAlign.center,
               ),
@@ -337,53 +448,72 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   }
 
   Widget _toolPanel() {
+    final tool = _activeTool!;
     return Material(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: switch (_activeTool!) {
-          _EditTool.whiteBalance => _whiteBalancePanel(),
-          _EditTool.brightness => _singleSliderPanel(
-              'Gaišums',
-              _params.brightness,
-              -1,
-              1,
-              (v) => _updateParams(_params.copyWith(brightness: v)),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => _resetTool(tool),
+                child: const Text('Atiestatīt šo režīmu'),
+              ),
             ),
-          _EditTool.contrast => _singleSliderPanel(
-              'Kontrasts',
-              _params.contrast,
-              0.5,
-              2,
-              (v) => _updateParams(_params.copyWith(contrast: v)),
-            ),
-          _EditTool.shadows => _singleSliderPanel(
-              'Ēnas',
-              _params.shadows,
-              -1,
-              1,
-              (v) => _updateParams(_params.copyWith(shadows: v)),
-            ),
-          _EditTool.crop => _cropPanel(),
-          _EditTool.rotate => _rotatePanel(),
-        },
+            switch (tool) {
+              _EditTool.whiteBalance => _whiteBalancePanel(),
+              _EditTool.brightness => _sliderPanel(
+                  'Gaišums',
+                  _params.brightness,
+                  -1,
+                  1,
+                  (v) => _updateParams(_params.copyWith(brightness: v)),
+                ),
+              _EditTool.contrast => _sliderPanel(
+                  'Kontrasts',
+                  _params.contrast,
+                  0.5,
+                  2,
+                  (v) => _updateParams(_params.copyWith(contrast: v)),
+                ),
+              _EditTool.highlights => _sliderPanel(
+                  'Spilgtumi',
+                  _params.highlights,
+                  -1,
+                  1,
+                  (v) => _updateParams(_params.copyWith(highlights: v)),
+                ),
+              _EditTool.shadows => _sliderPanel(
+                  'Ēnas',
+                  _params.shadows,
+                  -1,
+                  1,
+                  (v) => _updateParams(_params.copyWith(shadows: v)),
+                ),
+              _EditTool.crop => _cropPanel(),
+              _EditTool.rotate => _rotatePanel(),
+            },
+          ],
+        ),
       ),
     );
   }
 
   Widget _whiteBalancePanel() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _labeledSlider(
-          'Temp (auksts ← → silts)',
+        _sliderRow(
+          'Temp',
           _params.temperature,
           -1,
           1,
           (v) => _updateParams(_params.copyWith(temperature: v)),
         ),
-        _labeledSlider(
-          'Tint (zaļš ← → magenta)',
+        _sliderRow(
+          'Tint',
           _params.tint,
           -1,
           1,
@@ -393,44 +523,35 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     );
   }
 
-  Widget _singleSliderPanel(
+  Widget _sliderPanel(
     String label,
     double value,
     double min,
     double max,
     ValueChanged<double> onChanged,
-  ) {
-    return _labeledSlider(label, value, min, max, onChanged);
-  }
+  ) =>
+      _sliderRow(label, value, min, max, onChanged);
 
   Widget _cropPanel() {
-    final custom = _params.customAspect ?? 1.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Text(
+          'Velc rāmi uz attēla — pārkadrē. Izvēlies formātu vai brīvo.',
+          style: TextStyle(fontSize: 13),
+        ),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 6,
-          runSpacing: 4,
           children: [
             ActionChip(
-              label: const Text('Brīvais'),
-              onPressed: () => _updateParams(
-                _params.copyWith(
-                  clearCropAspect: true,
-                  cropLockAspect: false,
-                  customAspect: 1,
-                ),
-              ),
+              label: const Text('Pilns'),
+              onPressed: () => _resetTool(_EditTool.crop),
             ),
             ...ImageEditService.socialAspects.entries.map(
               (e) => ActionChip(
                 label: Text(e.key),
-                onPressed: () => _updateParams(
-                  _params.copyWith(
-                    cropAspect: e.value,
-                    cropLockAspect: true,
-                  ),
-                ),
+                onPressed: () => _applyAspectCrop(e.value),
               ),
             ),
           ],
@@ -438,71 +559,84 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Fiksēt malu attiecību'),
-          subtitle: const Text(
-            'Izslēdz — brīva proporcija ar slīdni zemāk',
-          ),
           value: _params.cropLockAspect,
-          onChanged: (v) => _updateParams(
-            _params.copyWith(
-              cropLockAspect: v,
-              clearCropAspect: !v,
-            ),
+          onChanged: (v) => setState(
+            () => _params = _params.copyWith(cropLockAspect: v),
           ),
         ),
-        if (!_params.cropLockAspect && _params.cropAspect == null)
-          _labeledSlider(
-            'Malu attiecība (platums : augstums)',
-            custom,
-            0.5,
-            2,
-            (v) => _updateParams(
-              _params.copyWith(
-                customAspect: v,
-                cropLockAspect: false,
-                clearCropAspect: true,
-              ),
-            ),
-          ),
       ],
     );
   }
 
   Widget _rotatePanel() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FilledButton.tonalIcon(
-          onPressed: _autoHorizon,
-          icon: const Icon(Icons.stay_current_landscape),
-          label: const Text('Auto horizonts'),
+        _sliderRow(
+          'Pagrieziens',
+          _params.rotationDegrees,
+          -45,
+          45,
+          (v) => _updateParams(_params.copyWith(rotationDegrees: v)),
         ),
-        OutlinedButton.icon(
-          onPressed: () => _updateParams(
-            _params.copyWith(
-              rotationDegrees: ImageEditService.normalizeRotation(
-                _params.rotationDegrees - 90,
-              ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Constrain crop'),
+          subtitle: const Text('Apgriež tukšās malas pēc pagriešanas'),
+          value: _params.constrainAfterRotate,
+          onChanged: (v) =>
+              _updateParams(_params.copyWith(constrainAfterRotate: v)),
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            FilledButton.tonalIcon(
+              onPressed: _autoHorizon,
+              icon: const Icon(Icons.stay_current_landscape),
+              label: const Text('Auto horizonts'),
             ),
-          ),
-          icon: const Icon(Icons.rotate_left),
-          label: const Text('−90°'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => _updateParams(
-            _params.copyWith(
-              rotationDegrees: ImageEditService.normalizeRotation(
-                _params.rotationDegrees + 90,
+            OutlinedButton(
+              onPressed: () => _updateParams(
+                _params.copyWith(
+                  rotationDegrees: ImageEditService.normalizeRotation(
+                    _params.rotationDegrees - 90,
+                  ),
+                ),
               ),
+              child: const Text('−90°'),
             ),
-          ),
-          icon: const Icon(Icons.rotate_right),
-          label: const Text('+90°'),
+            OutlinedButton(
+              onPressed: () => _updateParams(
+                _params.copyWith(
+                  rotationDegrees: ImageEditService.normalizeRotation(
+                    _params.rotationDegrees + 90,
+                  ),
+                ),
+              ),
+              child: const Text('+90°'),
+            ),
+          ],
         ),
-        TextButton(
-          onPressed: () =>
-              _updateParams(_params.copyWith(rotationDegrees: 0)),
-          child: const Text('Atiestatīt'),
+      ],
+    );
+  }
+
+  Widget _sliderRow(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('$label: ${value.toStringAsFixed(1)}'),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          onChanged: onChanged,
         ),
       ],
     );
@@ -514,7 +648,6 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_presets.isNotEmpty)
               SingleChildScrollView(
@@ -555,25 +688,22 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       ),
     );
   }
+}
 
-  Widget _labeledSlider(
-    String label,
-    double value,
-    double min,
-    double max,
-    ValueChanged<double> onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('$label: ${value.toStringAsFixed(2)}'),
-        Slider(
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          onChanged: onChanged,
-        ),
-      ],
-    );
+class _RotateGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35)
+      ..strokeWidth = 1;
+    for (var i = 1; i < 3; i++) {
+      final x = size.width * i / 3;
+      final y = size.height * i / 3;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

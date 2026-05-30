@@ -19,6 +19,33 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.17',
+    date: '2026-05-30',
+    summary: 'Info poga un RAW/JPG režģī',
+    items: [
+      'Skatītājā: Bildes dati (EXIF, izmērs, kamera)',
+      'Galerijā: RAW vai JPG uzlīme uz sīktēla',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.16',
+    date: '2026-05-30',
+    summary: 'Apstrāde un importa filtrs',
+    items: [
+      'Galerijā redzama sadaļa Importēt pēc reitinga (★1–★5)',
+      'Apstrāde: vertikālais priekšskatījums, pārkadrēšana, pagrieziens ar režģi',
+      'Katram rīkam — Atiestatīt šo režīmu',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.15',
+    date: '2026-05-30',
+    summary: 'Apstrāde — Spilgtumi',
+    items: [
+      'Jauns rīks Spilgtumi (Highlights) starp kontrastu un ēnām',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.14',
     date: '2026-05-30',
     summary: 'Live/Download importa filtrs un apstrādes UI',
@@ -199,4 +226,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.14';
+const String appVersionLabel = '0.3.17';

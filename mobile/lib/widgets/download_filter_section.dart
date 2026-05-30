@@ -22,9 +22,9 @@ class DownloadFilterSection extends StatelessWidget {
       children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Lejupielādēt visas bildes'),
+          title: const Text('Importēt visas bildes'),
           subtitle: const Text(
-            'Izslēdz — importē tikai ar reitingu kamerā (EXIF)',
+            'Izslēdz — tikai ar zvaigžņu reitingu (skat. zemāk)',
           ),
           value: allImages,
           onChanged: onAllImagesChanged,
