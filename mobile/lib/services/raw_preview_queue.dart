@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../utils/image_orientation.dart';
 import 'raw_preview_service.dart';
 
 /// Globāla RAW thumb rinda — nevis 75 paralēli zvani uz vienu native pavedienu.
@@ -38,8 +39,8 @@ class RawPreviewQueue extends ChangeNotifier {
       galleryFolder,
       rawPath,
     );
-    if (File(existing).existsSync() &&
-        File(existing).lengthSync() >= RawPreviewService.minThumbBytes) {
+    if (RawPreviewService.isUsableThumb(existing) &&
+        !await ImageOrientation.extractedThumbNeedsRebuild(existing)) {
       _completed[rawPath] = existing;
       return existing;
     }
@@ -47,6 +48,7 @@ class RawPreviewQueue extends ChangeNotifier {
       try {
         File(existing).deleteSync();
       } catch (_) {}
+      _completed.remove(rawPath);
     }
 
     for (final w in _waiters) {

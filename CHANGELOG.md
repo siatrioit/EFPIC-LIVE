@@ -4,6 +4,13 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.6] — 2026-05-30
+
+### Labots
+- RAW preview: vertikālas bildes pagriežas, horizontālās paliek pareizas (heuristika + pikseļu normalizācija)
+- Mazi/veci thumbs tiek dzēsti un ģenerēti no jauna
+- Bilžu skatītājs: apstrāde/reitings/krāsa atjaunoti; pogas neitrālas kamēr nav izmantotas
+
 ## [0.3.5] — 2026-05-30
 
 ### Labots

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/image_orientation.dart';
 import '../utils/image_paths.dart';
 import 'raw_preview_queue.dart';
 
@@ -15,6 +16,12 @@ class RawPreviewService {
 
   /// Zem šī izmēra uzskatām par zemu kvalitātes Exif sīktēlu — pārģenerē.
   static const minThumbBytes = 48 * 1024;
+
+  static bool isUsableThumb(String? path) {
+    if (path == null) return false;
+    final f = File(path);
+    return f.existsSync() && f.lengthSync() >= minThumbBytes;
+  }
 
   bool get isAndroid => !kIsWeb && Platform.isAndroid;
 

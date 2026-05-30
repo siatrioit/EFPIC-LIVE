@@ -208,6 +208,8 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     final path = item.localPath;
     final preview = item.thumbPath ?? _rawPreviewCache[item.id];
 
+    final rawSource = path != null && ImagePaths.isRaw(path) ? path : null;
+
     if (path != null && ImagePaths.isPreviewable(path) && File(path).existsSync()) {
       return InteractiveViewer(
         child: OrientedImageFile(
@@ -223,6 +225,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
       return InteractiveViewer(
         child: OrientedImageFile(
           path: preview,
+          rawSourcePath: ImagePaths.isExtractedRawThumb(preview)
+              ? rawSource
+              : null,
           fit: BoxFit.contain,
           cacheWidth: 4096,
           cacheHeight: 4096,
@@ -365,10 +370,45 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
         ),
         bottomNavigationBar: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.tune),
+                      tooltip: 'Apstrādāt bildi',
+                      color: Colors.white54,
+                      onPressed: _openEdit,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        img.starRating > 0
+                            ? Icons.star
+                            : Icons.star_border,
+                      ),
+                      tooltip: 'Reitings',
+                      color: img.starRating > 0
+                          ? Colors.amber
+                          : Colors.white54,
+                      onPressed: _editRating,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        img.colorLabel != ImageColorLabel.none
+                            ? Icons.label
+                            : Icons.label_outline,
+                      ),
+                      tooltip: 'Krāsu atzīme',
+                      color: img.colorLabel != ImageColorLabel.none
+                          ? img.colorLabel.color
+                          : Colors.white54,
+                      onPressed: _editColor,
+                    ),
+                  ],
+                ),
                 if (img.starRating > 0)
                   Text(
                     '★' * img.starRating,

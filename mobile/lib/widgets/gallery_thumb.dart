@@ -62,15 +62,20 @@ class _GalleryThumbState extends State<GalleryThumb> {
 
   String? _existingThumbPath() {
     final saved = widget.image.thumbPath;
-    if (saved != null && File(saved).existsSync()) return saved;
+    if (RawPreviewService.isUsableThumb(saved)) return saved;
     final folder = widget.galleryFolder;
     final local = widget.image.localPath;
     if (folder == null || local == null || !ImagePaths.isRaw(local)) {
-      return saved;
+      return RawPreviewService.isUsableThumb(saved) ? saved : null;
     }
     final onDisk = RawPreviewService.instance.thumbPathFor(folder, local);
-    if (File(onDisk).existsSync()) return onDisk;
-    return saved;
+    if (RawPreviewService.isUsableThumb(onDisk)) return onDisk;
+    if (File(onDisk).existsSync()) {
+      try {
+        File(onDisk).deleteSync();
+      } catch (_) {}
+    }
+    return null;
   }
 
   @override
@@ -115,8 +120,8 @@ class _GalleryThumbState extends State<GalleryThumb> {
   @override
   Widget build(BuildContext context) {
     final thumb = _resolvedThumb ?? widget.image.thumbPath;
-    if (thumb != null && File(thumb).existsSync()) {
-      return _image(thumb);
+    if (RawPreviewService.isUsableThumb(thumb)) {
+      return _image(thumb!);
     }
 
     final path = widget.image.localPath;

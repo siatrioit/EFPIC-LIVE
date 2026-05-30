@@ -114,4 +114,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.5';
+const String appVersionLabel = '0.3.6';

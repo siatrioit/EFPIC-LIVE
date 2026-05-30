@@ -1,6 +1,8 @@
 package lv.edgarsfoto.efpic_live
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
@@ -41,7 +43,7 @@ object RawPreviewExtractor {
 
         for (segment in candidates) {
             if (writeSegment(file, segment, dest) && isDecodableJpeg(dest)) {
-                resetExtractedThumbOrientation(destPath)
+                normalizeExtractedJpeg(sourcePath, destPath)
                 Log.d(TAG, "Embedded JPEG ${segment.size} B → $destPath")
                 return true
             }
@@ -53,7 +55,7 @@ object RawPreviewExtractor {
             writeSegment(file, fallback, dest) &&
             isDecodableJpeg(dest)
         ) {
-            resetExtractedThumbOrientation(destPath)
+            normalizeExtractedJpeg(sourcePath, destPath)
             return true
         }
 
@@ -64,7 +66,7 @@ object RawPreviewExtractor {
 
     private fun tryExifThumbnailFallback(sourcePath: String, destPath: String): Boolean {
         if (!tryExifThumbnail(sourcePath, destPath)) return false
-        resetExtractedThumbOrientation(destPath)
+        normalizeExtractedJpeg(sourcePath, destPath)
         Log.d(TAG, "Exif thumb (fallback) OK: $destPath")
         return true
     }
@@ -183,7 +185,76 @@ object RawPreviewExtractor {
         return lastEoi
     }
 
-    /** Iegultā JPG pikseļi jau ir pareizi — noņem maldinošu EXIF no _emb.jpg. */
+    private fun normalizeExtractedJpeg(sourcePath: String, destPath: String) {
+        try {
+            val srcExif = ExifInterface(sourcePath)
+            val orientation =
+                srcExif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL,
+                )
+
+            val bounds =
+                BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+            BitmapFactory.decodeFile(destPath, bounds)
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w <= 0 || h <= 0) {
+                resetExtractedThumbOrientation(destPath)
+                return
+            }
+
+            val landscapePixels = w > h
+            val quarterTurn =
+                orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+                    orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+                    orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+                    orientation == ExifInterface.ORIENTATION_TRANSVERSE
+
+            val shouldBake =
+                when {
+                    orientation == ExifInterface.ORIENTATION_NORMAL ||
+                        orientation == ExifInterface.ORIENTATION_UNDEFINED -> false
+                    quarterTurn && landscapePixels -> true
+                    quarterTurn && !landscapePixels -> false
+                    orientation == ExifInterface.ORIENTATION_ROTATE_180 -> true
+                    else -> false
+                }
+
+            if (!shouldBake) {
+                resetExtractedThumbOrientation(destPath)
+                return
+            }
+
+            var bitmap = BitmapFactory.decodeFile(destPath) ?: return
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90,
+                ExifInterface.ORIENTATION_TRANSPOSE,
+                -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270,
+                ExifInterface.ORIENTATION_TRANSVERSE,
+                -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+            }
+            val rotated =
+                Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) bitmap.recycle()
+            FileOutputStream(destPath).use { out ->
+                rotated.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            rotated.recycle()
+            resetExtractedThumbOrientation(destPath)
+        } catch (e: Exception) {
+            Log.d(TAG, "normalizeExtractedJpeg: ${e.message}")
+            resetExtractedThumbOrientation(destPath)
+        }
+    }
+
     private fun resetExtractedThumbOrientation(destPath: String) {
         try {
             val dest = ExifInterface(destPath)
