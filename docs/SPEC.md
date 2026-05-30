@@ -8,6 +8,7 @@ Based on initial requirements (2026-05-28):
 - Mode selection:
   - Live mode (always connected to camera)
   - Download mode (connect only when importing)
+  - **Foto Kaste** (planned) — portable booth: Nikon USB, preset + frame, print 9×13 on DNP DS620 — see [`docs/FOTO_KASTE.md`](FOTO_KASTE.md)
 
 ### Common options
 
