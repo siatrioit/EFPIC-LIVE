@@ -6,22 +6,28 @@ class StarRatingPicker extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.enabled = true,
+    this.compact = false,
   });
 
   final int value;
   final ValueChanged<int> onChanged;
   final bool enabled;
+  /// Kompakts režīms (skatītājs) — bez virsraksta, mazākas zvaigznes.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final starSize = compact ? 40.0 : 36.0;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Lejupielādēt no šī reitinga:',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 8),
+        if (!compact)
+          Text(
+            'Lejupielādēt no šī reitinga:',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        if (!compact) const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(5, (i) {
@@ -32,7 +38,7 @@ class StarRatingPicker extends StatelessWidget {
               icon: Icon(
                 filled ? Icons.star : Icons.star_border,
                 color: Colors.amber.shade700,
-                size: 36,
+                size: starSize,
               ),
             );
           }),

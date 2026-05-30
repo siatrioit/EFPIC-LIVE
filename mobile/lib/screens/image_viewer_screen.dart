@@ -101,26 +101,54 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
 
   Future<void> _editRating() async {
     var rating = _images[_index].starRating;
-    final result = await showDialog<int>(
+    final result = await showModalBottomSheet<int>(
       context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Zvaigznes'),
-          content: StarRatingPicker(
-            value: rating == 0 ? 1 : rating,
-            onChanged: (v) => setLocal(() => rating = v),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 0),
-              child: const Text('Noņemt'),
+        builder: (ctx, setLocal) {
+          final pick = rating == 0 ? 1 : rating;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Zvaigznes',
+                    style: Theme.of(ctx).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  StarRatingPicker(
+                    compact: true,
+                    value: pick,
+                    onChanged: (v) => setLocal(() => rating = v),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx, 0),
+                          child: const Text('Noņemt'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(ctx, pick),
+                          child: const Text('Saglabāt'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, rating),
-              child: const Text('Saglabāt'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (result == null) return;
@@ -160,13 +188,19 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     }
   }
 
-  void _markExcluded() {
-    _updateImage(
-      _images[_index].copyWith(uploadStatus: UploadStatus.excluded),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bilde atzīmēta: nesūtīt uz FTP')),
-    );
+  void _toggleFtpExcluded() {
+    final img = _images[_index];
+    if (img.uploadStatus == UploadStatus.excluded) {
+      _updateImage(img.copyWith(uploadStatus: UploadStatus.pending));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bilde atkal tiks sūtīta uz FTP')),
+      );
+    } else {
+      _updateImage(img.copyWith(uploadStatus: UploadStatus.excluded));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bilde atzīmēta: nesūtīt uz FTP')),
+      );
+    }
   }
 
   Future<void> _sendToFtp() async {
@@ -350,11 +384,21 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                 tooltip: 'Sūtīt uz FTP',
                 onPressed: _uploading ? null : _sendToFtp,
               ),
-            IconButton(
-              icon: const Icon(Icons.block),
-              tooltip: 'Nesūtīt',
-              onPressed: _markExcluded,
-            ),
+            if (ftp)
+              IconButton(
+                icon: Icon(
+                  img.uploadStatus == UploadStatus.excluded
+                      ? Icons.block
+                      : Icons.block_outlined,
+                ),
+                color: img.uploadStatus == UploadStatus.excluded
+                    ? Colors.orangeAccent
+                    : Colors.white,
+                tooltip: img.uploadStatus == UploadStatus.excluded
+                    ? 'Atļaut sūtīšanu uz FTP'
+                    : 'Nesūtīt uz FTP',
+                onPressed: _toggleFtpExcluded,
+              ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: _confirmDelete,

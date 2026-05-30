@@ -19,6 +19,15 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.8',
+    date: '2026-05-30',
+    summary: 'Skatītājs: FTP slēdzis un reitings',
+    items: [
+      'FTP «nesūtīt» — ieslēdzams/izslēdzams, poga maina krāsu',
+      'Zvaigžņu izvēle apakšējā panelī (ērtāk ar īkšķi)',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.7',
     date: '2026-05-30',
     summary: 'Galerijas režģis un preview orientācija',
@@ -134,4 +143,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.7';
+const String appVersionLabel = '0.3.8';

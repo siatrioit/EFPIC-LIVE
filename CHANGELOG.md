@@ -4,6 +4,12 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.8] — 2026-05-30
+
+### Labots
+- Bilžu skatītājs: FTP «nesūtīt» kā pārslēgs (var atkal ieslēgt sūtīšanu, poga oranža)
+- Reitinga izvēle — kompakts apakšējais panelis
+
 ## [0.3.7] — 2026-05-30
 
 ### Labots
