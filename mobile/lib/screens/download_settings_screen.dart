@@ -49,7 +49,7 @@ class _DownloadSettingsScreenState extends State<DownloadSettingsScreen> {
     final d = widget.draft;
     _format = d.downloadFormat;
     _allImages = d.downloadAllImages;
-    _minStars = d.minStarRating < 1 ? 1 : d.minStarRating.clamp(1, 5);
+    _allowedStars = d.importAllowedStars.toSet();
     _jpgQuality = d.jpgQuality;
     _jpgMaxEdge = d.jpgMaxLongEdge;
     _target = d.deliveryTarget;
@@ -65,8 +65,15 @@ class _DownloadSettingsScreenState extends State<DownloadSettingsScreen> {
         name: widget.draft.name,
         mode: widget.draft.mode,
         downloadFormat: _format,
-        minStarRating: _allImages ? 0 : _minStars,
+        minStarRating: _allImages
+            ? 0
+            : (_allowedStars.isEmpty
+                ? 1
+                : _allowedStars.reduce((a, b) => a < b ? a : b)),
         downloadAllImages: _allImages,
+        importAllowedStars: _allImages
+            ? const [1, 2, 3, 4, 5]
+            : (_allowedStars.toList()..sort()),
         jpgQuality: _jpgQuality,
         jpgMaxLongEdge: _jpgMaxEdge,
         deliveryTarget: _target,
