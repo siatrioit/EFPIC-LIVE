@@ -1,0 +1,17 @@
+---
+description: Nelabot/ne noņemt jau strādājošas vizuāli redzamas lietas
+alwaysApply: true
+---
+
+# Saglabāt strādājošo UI un vizuālo uzvedību
+
+Veicot izmaiņas EFPIC LIVE:
+
+1. **Minimālais diff** — labo tikai to, ko lietotājs lūdz; neaiztiec citus moduļus “profilaktiski”.
+2. **Vizuāli redzamas lietas** — ja ekrāns/pogas/režģis/preview jau strādā, **ne noņem, ne pārraksti** bez skaidra iemesla.
+3. **Pirms dzēšanas** — pārbaudi lietojumu (`grep`), vai nav saistīts ar citu funkciju (rediģēšana, RAW preview, orientācija, apakšējās pogas skatītājā).
+4. **Pēc labojuma** — īsi pārbaudi `docs/RELEASE.md` regresiju tabulu un vizuālo plūsmu, ko skāri.
+
+Ja orientācijas/preview labojums skar galeriju — neaiztiec bilžu rediģēšanu, reitingu/krāsu pogas un otrādi.
+
+Ja nav pārliecības — paplašini esošo kodu, nevis aizstāj ar jaunu abstrakciju.

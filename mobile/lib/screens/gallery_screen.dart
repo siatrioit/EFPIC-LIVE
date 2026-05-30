@@ -16,6 +16,7 @@ import '../models/import_policy.dart';
 import '../services/camera_import_service.dart';
 import '../services/camera_usb_service.dart';
 import '../services/edit_preset_repository.dart';
+import '../services/app_settings.dart';
 import '../services/gallery_workflow_service.dart';
 import '../services/image_edit_service.dart';
 import '../services/raw_preview_service.dart';
@@ -65,6 +66,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   int _thumbDone = 0;
   int _thumbTotal = 0;
   bool _importBusy = false;
+  int _gridColumns = AppSettings.defaultGalleryGridColumns;
 
   @override
   void initState() {
@@ -91,10 +93,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _load() async {
+    final cols = await AppSettings.instance.galleryGridColumns();
     final all = await AppRepository.instance.loadGalleries();
     final g = all.where((x) => x.id == widget.galleryId).firstOrNull;
     if (!mounted) return;
     setState(() {
+      _gridColumns = cols;
       _gallery = g;
       _workflow = g != null ? GalleryWorkflowService(g) : null;
       _loading = false;
@@ -200,6 +204,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _selectedIds.clear();
       _selectionMode = false;
     });
+  }
+
+  Future<void> _setGridColumns(int columns) async {
+    final c = columns.clamp(
+      AppSettings.minGalleryGridColumns,
+      AppSettings.maxGalleryGridColumns,
+    );
+    setState(() => _gridColumns = c);
+    await AppSettings.instance.setGalleryGridColumns(c);
   }
 
   Future<void> _updateSelectedImages(
@@ -1060,7 +1073,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final pending = _pendingUploadCount;
     final visible = _filteredImages(gallery);
     final mq = MediaQuery.of(context);
-    const gridCols = 2;
+    final gridCols = _gridColumns;
     const gridSpacing = 4.0;
     const gridPad = 8.0;
     final cellSide =
@@ -1245,6 +1258,30 @@ class _GalleryScreenState extends State<GalleryScreen> {
               ],
             ),
           ),
+          if (!_selectionMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Row(
+                children: [
+                  Text(
+                    'Kolonnas',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(width: 8),
+                  for (var c = AppSettings.minGalleryGridColumns;
+                      c <= AppSettings.maxGalleryGridColumns;
+                      c++)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text('$c'),
+                        selected: _gridColumns == c,
+                        onSelected: (_) => _setGridColumns(c),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Expanded(
             child: gallery.images.isEmpty
                 ? _EmptyGalleryHint(

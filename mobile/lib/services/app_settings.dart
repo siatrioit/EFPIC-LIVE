@@ -8,6 +8,11 @@ class AppSettings {
   static const _batteryThresholdKey = 'efpic_battery_threshold';
   static const _alertsEnabledKey = 'efpic_alerts_enabled';
   static const _themeModeKey = 'efpic_theme_mode';
+  static const _galleryGridColumnsKey = 'efpic_gallery_grid_columns';
+
+  static const int defaultGalleryGridColumns = 2;
+  static const int minGalleryGridColumns = 1;
+  static const int maxGalleryGridColumns = 4;
 
   static const int defaultBatteryThreshold = 20;
 
@@ -55,5 +60,19 @@ class AppSettings {
       _ => 'light',
     };
     await prefs.setString(_themeModeKey, value);
+  }
+
+  Future<int> galleryGridColumns() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_galleryGridColumnsKey) ?? defaultGalleryGridColumns)
+        .clamp(minGalleryGridColumns, maxGalleryGridColumns);
+  }
+
+  Future<void> setGalleryGridColumns(int columns) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _galleryGridColumnsKey,
+      columns.clamp(minGalleryGridColumns, maxGalleryGridColumns),
+    );
   }
 }

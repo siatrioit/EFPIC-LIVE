@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/gallery_image.dart';
 import '../services/raw_preview_queue.dart';
 import '../services/raw_preview_service.dart';
+import '../utils/image_orientation.dart';
 import '../utils/image_paths.dart';
 import 'oriented_image_file.dart';
 
@@ -50,7 +51,8 @@ class _GalleryThumbState extends State<GalleryThumb> {
     final local = widget.image.localPath;
     if (local == null) return;
     final cached = RawPreviewQueue.instance.cachedResult(local);
-    if (cached != null && File(cached).existsSync()) {
+    if (cached != null && RawPreviewService.isUsableThumb(cached)) {
+      ImageOrientation.invalidateForDisplay(cached, local);
       setState(() => _resolvedThumb = cached);
     } else {
       setState(() {
@@ -109,8 +111,12 @@ class _GalleryThumbState extends State<GalleryThumb> {
   }
 
   Widget _image(String path) {
+    final local = widget.image.localPath;
+    final rawSource =
+        local != null && ImagePaths.isRaw(local) ? local : null;
     return OrientedImageFile(
       path: path,
+      rawSourcePath: ImagePaths.isExtractedRawThumb(path) ? rawSource : null,
       fit: BoxFit.cover,
       cacheWidth: widget.cacheSize,
       cacheHeight: widget.cacheSize,

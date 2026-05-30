@@ -4,6 +4,12 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.7] — 2026-05-30
+
+### Labots
+- Galerijas režģis: vertikālu RAW/JPG preview orientācija kā pilnā skatā
+- Kolonnu skaits 1–4, saglabāts iestatījumos
+
 ## [0.3.6] — 2026-05-30
 
 ### Labots

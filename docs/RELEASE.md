@@ -31,3 +31,8 @@ flutter build apk --debug
 | Live imports | `camera_import_service.dart`, `gallery_screen.dart` |
 
 Ja labo vienu jomu, pārbaudi, ka nav noņemtas pogas vai importi no `image_viewer_screen` / `gallery_screen` UI.
+
+## Principi izstrādē
+
+- **Neaiztikt strādājošo vizuālo** — minimāls diff; nelabot/ne noņemt ekrānus, pogas, preview, režģi, kas jau darbojas, ja tas nav tieši uzdevumā.
+- Cursor noteikums: `.cursor/rules/preserve-working-ui.mdc`

@@ -1,7 +1,7 @@
 name: efpic_live
 description: EFPIC LIVE — camera workflow, galleries, FTP and web delivery.
 publish_to: 'none'
-version: 0.3.6+11
+version: 0.3.7+12
 
 environment:
   sdk: ^3.12.0

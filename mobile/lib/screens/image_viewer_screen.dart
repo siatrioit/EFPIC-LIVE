@@ -255,9 +255,10 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
             return InteractiveViewer(
               child: OrientedImageFile(
                 path: thumb,
+                rawSourcePath: rawSource,
                 fit: BoxFit.contain,
-                cacheWidth: 2048,
-                cacheHeight: 2048,
+                cacheWidth: 4096,
+                cacheHeight: 4096,
               ),
             );
           }

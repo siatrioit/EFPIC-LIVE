@@ -19,6 +19,26 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.7',
+    date: '2026-05-30',
+    summary: 'Galerijas režģis un preview orientācija',
+    items: [
+      'Vertikālas bildes pagriežas arī režģī (kā skatītājā)',
+      'Orientācijas keša notīrīšana pēc thumb ģenerēšanas',
+      'Kolonnu skaits 1–4 (čipi zem filtriem)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.6',
+    date: '2026-05-30',
+    summary: 'Preview, orientācija, skatītāja pogas',
+    items: [
+      'Vertikālas RAW bildes: vieda orientācija',
+      'Mazi/veci _emb.jpg pārģenerēti',
+      'Apakšējās pogas: apstrāde, reitings, krāsa',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.5',
     date: '2026-05-30',
     summary: 'Galerijas preview orientācija',
@@ -114,4 +134,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.6';
+const String appVersionLabel = '0.3.7';
