@@ -29,7 +29,7 @@ class DownloadSettingsScreen extends StatefulWidget {
 class _DownloadSettingsScreenState extends State<DownloadSettingsScreen> {
   late DownloadFormat _format;
   late bool _allImages;
-  late int _minStars;
+  late Set<int> _allowedStars;
   late int _jpgQuality;
   late int _jpgMaxEdge;
   late DeliveryTargetType _target;
@@ -151,12 +151,15 @@ class _DownloadSettingsScreenState extends State<DownloadSettingsScreen> {
                 const SizedBox(height: 16),
                 DownloadFilterSection(
                   allImages: _allImages,
-                  minStars: _minStars,
+                  allowedStars: _allowedStars,
                   onAllImagesChanged: (v) => setState(() {
                     _allImages = v;
-                    if (!v && _minStars < 1) _minStars = 1;
+                    if (!v && _allowedStars.isEmpty) {
+                      _allowedStars = {3, 4, 5};
+                    }
                   }),
-                  onMinStarsChanged: (v) => setState(() => _minStars = v),
+                  onAllowedStarsChanged: (s) =>
+                      setState(() => _allowedStars = s),
                 ),
               ],
             ),

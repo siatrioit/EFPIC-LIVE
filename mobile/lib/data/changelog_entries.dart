@@ -19,6 +19,16 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.14',
+    date: '2026-05-30',
+    summary: 'Live/Download importa filtrs un apstrādes UI',
+    items: [
+      'Importa filtrs: tikai ar reitingu, izvēle ★1–★5',
+      'Apstrāde: Temp/Tint, ēnas, rīkjosla; labāks gaišums/kontrasts',
+      'Priekšskatījums ar EXIF orientāciju un pagriezienu/izgriešanu',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.13',
     date: '2026-05-30',
     summary: 'Bilžu apstrāde — Temp, Tint, ēnas',
@@ -189,4 +199,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.13';
+const String appVersionLabel = '0.3.14';

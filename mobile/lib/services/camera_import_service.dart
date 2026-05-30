@@ -137,7 +137,7 @@ class CameraImportService {
       if (!_matchesDownloadFormat(config.downloadFormat, path)) continue;
 
       final stars = await ratingForPath(path);
-      if (!config.downloadAllImages && stars < config.minStarRating) {
+      if (!config.acceptsImportRating(stars)) {
         continue;
       }
 

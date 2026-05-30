@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'star_rating_picker.dart';
-
+/// Live / Download — importēt tikai ar EXIF reitingu; izvēle ★1–★5.
 class DownloadFilterSection extends StatelessWidget {
   const DownloadFilterSection({
     super.key,
     required this.allImages,
-    required this.minStars,
+    required this.allowedStars,
     required this.onAllImagesChanged,
-    required this.onMinStarsChanged,
+    required this.onAllowedStarsChanged,
   });
 
   final bool allImages;
-  final int minStars;
+  final Set<int> allowedStars;
   final ValueChanged<bool> onAllImagesChanged;
-  final ValueChanged<int> onMinStarsChanged;
+  final ValueChanged<Set<int>> onAllowedStarsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -25,17 +24,47 @@ class DownloadFilterSection extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           title: const Text('Lejupielādēt visas bildes'),
           subtitle: const Text(
-            'Izslēdz, lai ņemtu tikai ar izvēlēto zvaigžņu reitingu',
+            'Izslēdz — importē tikai ar reitingu kamerā (EXIF)',
           ),
           value: allImages,
           onChanged: onAllImagesChanged,
         ),
         if (!allImages) ...[
           const SizedBox(height: 8),
-          StarRatingPicker(
-            value: minStars.clamp(1, 5),
-            onChanged: onMinStarsChanged,
+          Text(
+            'Kuri reitingi importēt:',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: List.generate(5, (i) {
+              final star = i + 1;
+              final selected = allowedStars.contains(star);
+              return FilterChip(
+                label: Text('★$star'),
+                selected: selected,
+                onSelected: (v) {
+                  final next = Set<int>.from(allowedStars);
+                  if (v) {
+                    next.add(star);
+                  } else {
+                    next.remove(star);
+                  }
+                  if (next.isEmpty) return;
+                  onAllowedStarsChanged(next);
+                },
+              );
+            }),
+          ),
+          if (allowedStars.isEmpty)
+            Text(
+              'Izvēlies vismaz vienu reitingu',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+            ),
         ],
       ],
     );

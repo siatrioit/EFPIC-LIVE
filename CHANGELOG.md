@@ -4,6 +4,12 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.14] — 2026-05-30
+
+### Labots / pievienots (Live, Download)
+- Galerijas iestatījumi: importēt tikai ar EXIF reitingu; izvēle ★1–★5
+- Bilžu apstrāde: gaišums/kontrasts; orientācija priekšskatījumā; rīkjosla ar slīdņiem zem pogām (balans, gaišums, kontrasts, ēnas, izmērs, pagrieziens)
+
 ## [0.3.13] — 2026-05-30
 
 ### Labots / pievienots

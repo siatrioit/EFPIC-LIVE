@@ -18,6 +18,8 @@ class ImageEditParams {
     this.shadows = 0,
     this.rotationDegrees = 0,
     this.cropAspect,
+    this.cropLockAspect = true,
+    this.customAspect,
     this.cropLeft = 0,
     this.cropTop = 0,
     this.cropWidth = 1,
@@ -32,6 +34,10 @@ class ImageEditParams {
   final double shadows;
   final int rotationDegrees;
   final double? cropAspect;
+  /// true = centrālais izgriezums pēc [cropAspect]; false = brīva malu attiecība.
+  final bool cropLockAspect;
+  /// Ja [cropLockAspect] ir false un nav [cropAspect] — manuāla proporcija.
+  final double? customAspect;
   final double cropLeft;
   final double cropTop;
   final double cropWidth;
@@ -58,6 +64,9 @@ class ImageEditParams {
     int? rotationDegrees,
     double? cropAspect,
     bool clearCropAspect = false,
+    bool? cropLockAspect,
+    double? customAspect,
+    bool clearCustomAspect = false,
     double? cropLeft,
     double? cropTop,
     double? cropWidth,
@@ -72,6 +81,9 @@ class ImageEditParams {
         shadows: shadows ?? this.shadows,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
         cropAspect: clearCropAspect ? null : (cropAspect ?? this.cropAspect),
+        cropLockAspect: cropLockAspect ?? this.cropLockAspect,
+        customAspect:
+            clearCustomAspect ? null : (customAspect ?? this.customAspect),
         cropLeft: cropLeft ?? this.cropLeft,
         cropTop: cropTop ?? this.cropTop,
         cropWidth: cropWidth ?? this.cropWidth,
@@ -120,8 +132,42 @@ class ImageEditService {
 
     image = img.bakeOrientation(image);
     image = _resizeLongEdge(image, previewMaxLongEdge);
+    image = applyGeometry(image, params);
     image = process(image, params);
     return Uint8List.fromList(img.encodeJpg(image, quality: 88));
+  }
+
+  /// Orientācija + pagrieziens + izgriešana (priekšskatījumam un saglabāšanai).
+  img.Image applyGeometry(img.Image image, ImageEditParams p) {
+    var out = image;
+    if (p.rotationDegrees != 0) {
+      out = img.copyRotate(out, angle: p.rotationDegrees);
+    }
+
+    if (p.cropWidth < 0.999 || p.cropHeight < 0.999) {
+      final x =
+          (out.width * p.cropLeft).round().clamp(0, out.width - 1);
+      final y =
+          (out.height * p.cropTop).round().clamp(0, out.height - 1);
+      final w =
+          (out.width * p.cropWidth).round().clamp(1, out.width - x);
+      final h =
+          (out.height * p.cropHeight).round().clamp(1, out.height - y);
+      out = img.copyCrop(out, x: x, y: y, width: w, height: h);
+      return out;
+    }
+
+    final aspect = _effectiveCropAspect(p);
+    if (aspect != null && aspect > 0) {
+      out = _cropToAspect(out, aspect);
+    }
+    return out;
+  }
+
+  double? _effectiveCropAspect(ImageEditParams p) {
+    if (p.cropAspect != null) return p.cropAspect;
+    if (!p.cropLockAspect && p.customAspect != null) return p.customAspect;
+    return null;
   }
 
   Future<bool> applyAndSave({
@@ -134,25 +180,7 @@ class ImageEditService {
     if (image == null) return false;
 
     image = img.bakeOrientation(image);
-
-    if (params.rotationDegrees != 0) {
-      image = img.copyRotate(image, angle: params.rotationDegrees);
-    }
-
-    if (params.cropWidth < 0.999 || params.cropHeight < 0.999) {
-      final x =
-          (image.width * params.cropLeft).round().clamp(0, image.width - 1);
-      final y =
-          (image.height * params.cropTop).round().clamp(0, image.height - 1);
-      final w =
-          (image.width * params.cropWidth).round().clamp(1, image.width - x);
-      final h =
-          (image.height * params.cropHeight).round().clamp(1, image.height - y);
-      image = img.copyCrop(image, x: x, y: y, width: w, height: h);
-    } else if (params.cropAspect != null && params.cropAspect! > 0) {
-      image = _cropToAspect(image, params.cropAspect!);
-    }
-
+    image = applyGeometry(image, params);
     image = process(image, params);
 
     final outDir = Directory(p.dirname(destPath));
@@ -175,16 +203,42 @@ class ImageEditService {
       out = _applyShadows(out, p.shadows);
     }
     if (p.brightness != 0 || p.contrast != 1) {
-      out = img.adjustColor(
-        out,
-        brightness: p.brightness,
-        contrast: p.contrast,
-      );
+      out = _applyBrightnessContrast(out, p.brightness, p.contrast);
     }
     if (p.saturation != 1) {
       out = img.adjustColor(out, saturation: p.saturation);
     }
     return out;
+  }
+
+  img.Image _applyBrightnessContrast(
+    img.Image src,
+    double brightness,
+    double contrast,
+  ) {
+    final out = img.Image.from(src);
+    final bOff = brightness.clamp(-1.0, 1.0) * 48;
+    final c = contrast.clamp(0.25, 2.5);
+
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final px = src.getPixel(x, y);
+        final r = ((px.r - 128) * c + 128 + bOff).round().clamp(0, 255);
+        final g = ((px.g - 128) * c + 128 + bOff).round().clamp(0, 255);
+        final b = ((px.b - 128) * c + 128 + bOff).round().clamp(0, 255);
+        out.setPixelRgba(x, y, r, g, b, px.a.round().clamp(0, 255));
+      }
+    }
+    return out;
+  }
+
+  /// Pēc EXIF normalizācijas — platums/augstums priekš auto horizonta.
+  Future<({int width, int height})?> orientedDimensions(String sourcePath) async {
+    final bytes = await File(sourcePath).readAsBytes();
+    var image = img.decodeImage(bytes);
+    if (image == null) return null;
+    image = img.bakeOrientation(image);
+    return (width: image.width, height: image.height);
   }
 
   img.Image _applyWhiteBalance(img.Image src, double temperature, double tint) {

@@ -29,7 +29,7 @@ class LiveSettingsScreen extends StatefulWidget {
 class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
   late DownloadFormat _format;
   late bool _allImages;
-  late int _minStars;
+  late Set<int> _allowedStars;
   late int _jpgQuality;
   late int _jpgMaxEdge;
   late DeliveryTargetType _target;
@@ -48,7 +48,7 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
     final d = widget.draft;
     _format = d.downloadFormat;
     _allImages = d.downloadAllImages;
-    _minStars = d.minStarRating < 1 ? 1 : d.minStarRating.clamp(1, 5);
+    _allowedStars = d.importAllowedStars.toSet();
     _jpgQuality = d.jpgQuality;
     _jpgMaxEdge = d.jpgMaxLongEdge;
     _target = d.deliveryTarget;
@@ -63,8 +63,15 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
         name: widget.draft.name,
         mode: widget.draft.mode,
         downloadFormat: _format,
-        minStarRating: _allImages ? 0 : _minStars,
+        minStarRating: _allImages
+            ? 0
+            : (_allowedStars.isEmpty
+                ? 1
+                : _allowedStars.reduce((a, b) => a < b ? a : b)),
         downloadAllImages: _allImages,
+        importAllowedStars: _allImages
+            ? const [1, 2, 3, 4, 5]
+            : (_allowedStars.toList()..sort()),
         jpgQuality: _jpgQuality,
         jpgMaxLongEdge: _jpgMaxEdge,
         deliveryTarget: _target,
@@ -159,12 +166,15 @@ class _LiveSettingsScreenState extends State<LiveSettingsScreen> {
                 const SizedBox(height: 16),
                 DownloadFilterSection(
                   allImages: _allImages,
-                  minStars: _minStars,
+                  allowedStars: _allowedStars,
                   onAllImagesChanged: (v) => setState(() {
                     _allImages = v;
-                    if (!v && _minStars < 1) _minStars = 1;
+                    if (!v && _allowedStars.isEmpty) {
+                      _allowedStars = {3, 4, 5};
+                    }
                   }),
-                  onMinStarsChanged: (v) => setState(() => _minStars = v),
+                  onAllowedStarsChanged: (s) =>
+                      setState(() => _allowedStars = s),
                 ),
               ],
             ),

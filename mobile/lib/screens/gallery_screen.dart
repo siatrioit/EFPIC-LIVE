@@ -451,7 +451,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         final stars = c.starRating > 0
             ? c.starRating
             : await CameraImportService.instance.ratingForPath(c.sourcePath);
-        if (stars >= cfg.minStarRating) {
+        if (cfg.acceptsImportRating(stars)) {
           withRatings.add(
             ImportCandidate(
               sourcePath: c.sourcePath,
@@ -465,9 +465,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
       filtered = withRatings;
       if (filtered.isEmpty) {
         if (!mounted) return;
+        final starsLabel = cfg.importAllowedStars.map((s) => '★$s').join(', ');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nav bilžu, kas atbilst zvaigžņu filtram'),
+          SnackBar(
+            content: Text(
+              'Nav bilžu ar reitingu ($starsLabel) vai bez EXIF reitinga',
+            ),
           ),
         );
         return;
