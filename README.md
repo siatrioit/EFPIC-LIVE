@@ -2,7 +2,7 @@
 
 Mobilā lietotne fotogrāfiem un pasākumu operatoriem: galerijas, Live/Download imports, RAW priekšskatījumi, bilžu apstrāde, FTP/Web piegāde.
 
-**Pašreizējā versija:** `0.3.4` (skatīt `mobile/pubspec.yaml`)
+**Pašreizējā versija:** `0.3.5` (skatīt `mobile/pubspec.yaml`)
 
 **Repozitorijs:** [github.com/siatrioit/EFPIC-LIVE](https://github.com/siatrioit/EFPIC-LIVE)
 

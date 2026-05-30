@@ -27,4 +27,10 @@ class ImagePaths {
     if (path == null) return false;
     return isJpeg(path);
   }
+
+  /// RAW izvilkts priekšskatījums — pikseļi jau pareizā orientācijā, bez EXIF pagriešanas.
+  static bool isExtractedRawThumb(String path) {
+    final name = p.basename(path).toLowerCase();
+    return name.endsWith('_emb.jpg') || path.replaceAll('\\', '/').contains('/_thumbs/');
+  }
 }

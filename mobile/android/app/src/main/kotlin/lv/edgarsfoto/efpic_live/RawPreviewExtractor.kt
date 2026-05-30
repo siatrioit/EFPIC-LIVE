@@ -41,7 +41,7 @@ object RawPreviewExtractor {
 
         for (segment in candidates) {
             if (writeSegment(file, segment, dest) && isDecodableJpeg(dest)) {
-                copyOrientationFromSource(sourcePath, destPath)
+                resetExtractedThumbOrientation(destPath)
                 Log.d(TAG, "Embedded JPEG ${segment.size} B → $destPath")
                 return true
             }
@@ -53,7 +53,7 @@ object RawPreviewExtractor {
             writeSegment(file, fallback, dest) &&
             isDecodableJpeg(dest)
         ) {
-            copyOrientationFromSource(sourcePath, destPath)
+            resetExtractedThumbOrientation(destPath)
             return true
         }
 
@@ -64,7 +64,7 @@ object RawPreviewExtractor {
 
     private fun tryExifThumbnailFallback(sourcePath: String, destPath: String): Boolean {
         if (!tryExifThumbnail(sourcePath, destPath)) return false
-        copyOrientationFromSource(sourcePath, destPath)
+        resetExtractedThumbOrientation(destPath)
         Log.d(TAG, "Exif thumb (fallback) OK: $destPath")
         return true
     }
@@ -183,25 +183,17 @@ object RawPreviewExtractor {
         return lastEoi
     }
 
-    /** Pārnes orientāciju no RAW/JPEG avota uz izvilkto priekšskatījumu. */
-    private fun copyOrientationFromSource(sourcePath: String, destPath: String) {
+    /** Iegultā JPG pikseļi jau ir pareizi — noņem maldinošu EXIF no _emb.jpg. */
+    private fun resetExtractedThumbOrientation(destPath: String) {
         try {
-            val src = ExifInterface(sourcePath)
-            val orient =
-                src.getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION,
-                    ExifInterface.ORIENTATION_UNDEFINED,
-                )
-            if (orient == ExifInterface.ORIENTATION_UNDEFINED ||
-                orient == ExifInterface.ORIENTATION_NORMAL
-            ) {
-                return
-            }
             val dest = ExifInterface(destPath)
-            dest.setAttribute(ExifInterface.TAG_ORIENTATION, orient.toString())
+            dest.setAttribute(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL.toString(),
+            )
             dest.saveAttributes()
         } catch (e: Exception) {
-            Log.d(TAG, "Orient copy: ${e.message}")
+            Log.d(TAG, "Orient reset: ${e.message}")
         }
     }
 }

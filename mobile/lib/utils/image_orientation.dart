@@ -12,22 +12,16 @@ class ImageOrientation {
 
   static final _cache = <String, int>{};
 
-  static Future<int> readExifValue(
-    String path, {
-    String? orientationSource,
-  }) async {
-    final cacheKey = orientationSource != null ? '$path|$orientationSource' : path;
-    final cached = _cache[cacheKey];
-    if (cached != null) return cached;
-
-    var value = await _readOrientationFromFile(path);
-    if (value == 1 &&
-        orientationSource != null &&
-        orientationSource != path) {
-      value = await _readOrientationFromFile(orientationSource);
+  static Future<int> readExifValue(String path) async {
+    if (ImagePaths.isExtractedRawThumb(path)) {
+      return 1;
     }
 
-    _cache[cacheKey] = value;
+    final cached = _cache[path];
+    if (cached != null) return cached;
+
+    final value = await _readOrientationFromFile(path);
+    _cache[path] = value;
     return value;
   }
 

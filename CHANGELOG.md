@@ -4,6 +4,11 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.5] — 2026-05-30
+
+### Labots
+- Galerijas RAW/JPG preview: horizontālas bildes vairs nav apgrieztas uz sāni (noņemta dubultā EXIF pagriešana no NEF uz `_emb.jpg`)
+
 ## [0.3.4] — 2026-05-29
 
 ### Labots

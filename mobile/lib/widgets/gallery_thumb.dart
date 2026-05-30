@@ -104,12 +104,8 @@ class _GalleryThumbState extends State<GalleryThumb> {
   }
 
   Widget _image(String path) {
-    final rawSource = ImagePaths.isRaw(widget.image.localPath ?? '')
-        ? widget.image.localPath
-        : null;
     return OrientedImageFile(
       path: path,
-      orientationSource: rawSource,
       fit: BoxFit.cover,
       cacheWidth: widget.cacheSize,
       cacheHeight: widget.cacheSize,

@@ -9,15 +9,12 @@ class OrientedImageFile extends StatefulWidget {
   const OrientedImageFile({
     super.key,
     required this.path,
-    this.orientationSource,
     this.fit = BoxFit.cover,
     this.cacheWidth,
     this.cacheHeight,
   });
 
   final String path;
-  /// Orientācija no RAW avota, ja priekšskatījums ir `_emb.jpg`.
-  final String? orientationSource;
   final BoxFit fit;
   final int? cacheWidth;
   final int? cacheHeight;
@@ -39,18 +36,14 @@ class _OrientedImageFileState extends State<OrientedImageFile> {
   @override
   void didUpdateWidget(OrientedImageFile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path ||
-        oldWidget.orientationSource != widget.orientationSource) {
+    if (oldWidget.path != widget.path) {
       _loaded = false;
       _load();
     }
   }
 
   Future<void> _load() async {
-    final o = await ImageOrientation.readExifValue(
-      widget.path,
-      orientationSource: widget.orientationSource,
-    );
+    final o = await ImageOrientation.readExifValue(widget.path);
     if (!mounted) return;
     setState(() {
       _orientation = o;

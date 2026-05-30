@@ -19,6 +19,16 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.5',
+    date: '2026-05-30',
+    summary: 'Galerijas preview orientācija',
+    items: [
+      'Labots: horizontālas bildes vairs netiek lieki pagrieztas sāni',
+      'RAW _emb.jpg: orientācija netiek ņemta no NEF (dubultā pagriešana)',
+      'Jauni RAW thumbs saglabā EXIF kā Normal',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.4',
     date: '2026-05-29',
     summary: 'Priekšskatījumu kvalitāte, orientācija, rediģēšana',
@@ -104,4 +114,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.4';
+const String appVersionLabel = '0.3.5';
