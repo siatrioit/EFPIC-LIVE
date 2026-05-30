@@ -541,11 +541,56 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _scanFolder() async {
-    if (_gallery == null) return;
+    if (_gallery == null || !mounted) return;
+    final folder = _gallery!.folderPath;
+    if (folder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Galerijai nav norādīta mape')),
+      );
+      return;
+    }
+
+    final dir = Directory(folder);
+    if (!await dir.exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Galerijas mape neeksistē:\n$folder'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
     final batch = await CameraImportService.instance.scanFolder(_gallery!);
+    if (!mounted) return;
+
+    if (batch.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Nav jaunu bilžu mapē.\n$folder'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    final autoConfirm = _gallery!.config.mode == EventMode.live;
+    if (!autoConfirm &&
+        _gallery!.config.importPolicy == ImportPolicy.never) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Importa politika: «Nekad» — maini galerijas iestatījumos',
+          ),
+        ),
+      );
+      return;
+    }
+
     await _handleImportBatch(
       batch,
-      autoConfirm: _gallery!.config.mode == EventMode.live,
+      autoConfirm: autoConfirm,
     );
   }
 
