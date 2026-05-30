@@ -19,6 +19,38 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.20',
+    date: '2026-05-30',
+    summary: 'Apstrādes avots: RAW vs JPG',
+    items: [
+      'Panelis ar avota failu, apstrādes failu un izmēriem',
+      'RAW: iegults JPG + EXIF no RAW; JPG: tieša apstrāde',
+      'RAW prioritāte, ja galerijā ir NEF/ARW u.c.',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.19',
+    date: '2026-05-30',
+    summary: 'Kadrs: izmērs + pagrieziens',
+    items: [
+      'Viens rīks Kadrs — pārkadrēšana un pagrieziens kopā',
+      'Formāti (Instagram, Stories u.c.) caur vienu pogu',
+      'Priekšskatījums: kadrs bez krāsas; krāsa bez kadra',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.18',
+    date: '2026-05-30',
+    summary: 'Apstrāde: orientācija, rotācija, AWB',
+    items: [
+      'RAW/JPG uzlīme augšā kreisajā; ★ reitings paliek apakšā',
+      'RAW apstrāde uz iegultā priekšskata; vertikālais skats labots',
+      'Pagrieziens ±90° + smalkais slīdnis; constrain bez melnām malām',
+      'Auto horizonts, Auto balans (AWB), Atjaunot oriģinālu',
+      'Slīdņi ar mazākiem soļiem',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.17',
     date: '2026-05-30',
     summary: 'Info poga un RAW/JPG režģī',
@@ -226,4 +258,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.17';
+const String appVersionLabel = '0.3.20';

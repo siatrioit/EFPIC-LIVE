@@ -312,14 +312,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
     for (final id in _selectedIds) {
       final img = updated.images.where((i) => i.id == id).firstOrNull;
       if (img?.localPath == null) continue;
-      final src = await ImageEditService.instance.editableSourcePath(
+      final src = await ImageEditService.instance.resolveEditSource(
         localPath: img!.localPath!,
+        galleryFileName: img.fileName,
         thumbPath: img.thumbPath,
+        galleryFolder: updated.folderPath,
       );
       if (src == null) continue;
-      final dest = ImageEditService.instance.editedOutputPath(img.localPath!);
+      final baseline = ImageEditService.instance.baselineLocalPath(
+        img.localPath!,
+        galleryFileName: img.fileName,
+      );
+      final dest = ImageEditService.instance.editedOutputPath(baseline);
       final ok = await ImageEditService.instance.applyPreset(
-        sourcePath: src,
+        source: src,
         destPath: dest,
         preset: preset,
       );
@@ -360,6 +366,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         builder: (_) => ImageEditScreen(
           images: _gallery!.images,
           initialIndex: _gallery!.images.indexOf(img),
+          galleryFolder: _gallery!.folderPath,
         ),
       ),
     );

@@ -4,6 +4,29 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.20] — 2026-05-30
+
+### Labots (bilžu apstrāde)
+- Skaidrs **apstrādes avota** panelis: RAW vs JPG, faila nosaukums, izmērs, px
+- RAW bildei prioritāte pār blakus esošu JPG; automātiska iegultā priekšskata izvilkšana
+- EXIF izmēri no RAW; saglabājuma ceļš (`_edited.jpg` blakus RAW)
+
+## [0.3.19] — 2026-05-30
+
+### Labots (bilžu apstrāde)
+- **Kadrs** — apvienots izmērs un pagrieziens vienā rīkā (formāti caur vienu pogu)
+- Katrs rīks rāda savu slāni: kadrs bez krāsas labojumiem; krāsa bez kadra/pagrieziena
+
+## [0.3.18] — 2026-05-30
+
+### Labots (bilžu apstrāde, galerija)
+- **RAW/JPG** uzlīme režģī — augšējā kreisajā stūrī (vairs ne pārklājas ar ★ reitingu)
+- Vertikālais priekšskatījums RAW (pareiza EXIF no avota faila)
+- Pagrieziens: ±90° atsevišķi no smalkā slīdņa; **Constrain crop** bez melnām malām
+- **Auto horizonts** stāvām bildēm; **Auto balans (AWB)** baltajam balansam
+- **Atjaunot oriģinālu** — atiestata visus labojumus (arī pēc saglabāšanas, ja atver no RAW)
+- Slīdņi ar smalkākiem soļiem; paziņojums, ka RAW tiek apstrādāts uz iegultā JPG
+
 ## [0.3.17] — 2026-05-30
 
 ### Pievienots

@@ -136,8 +136,8 @@ class _GalleryThumbState extends State<GalleryThumb> {
       children: [
         child,
         Positioned(
+          top: 4,
           left: 4,
-          bottom: 4,
           child: ImageFormatBadge(label: _formatLabel),
         ),
       ],

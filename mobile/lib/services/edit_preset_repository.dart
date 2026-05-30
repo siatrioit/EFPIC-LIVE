@@ -79,7 +79,7 @@ class EditPresetRepository {
       tint: params.tint,
       shadows: params.shadows,
       highlights: params.highlights,
-      rotationDegrees: params.rotationDegrees.round(),
+      rotationDegrees: params.totalRotationDegrees.round() % 360,
       cropAspect: params.cropAspect,
     );
     await add(preset);

@@ -16,6 +16,7 @@ class ImageEditCropCanvas extends StatefulWidget {
     required this.lockAspect,
     this.aspectRatio,
     required this.onCropChanged,
+    this.showRuleOfThirds = false,
   });
 
   final Uint8List imageBytes;
@@ -29,6 +30,7 @@ class ImageEditCropCanvas extends StatefulWidget {
   final double? aspectRatio;
   final void Function(double left, double top, double width, double height)
       onCropChanged;
+  final bool showRuleOfThirds;
 
   @override
   State<ImageEditCropCanvas> createState() => _ImageEditCropCanvasState();
@@ -192,10 +194,15 @@ class _ImageEditCropCanvasState extends State<ImageEditCropCanvas> {
 enum _DragMode { none, move, resizeBr }
 
 class _CropOverlayPainter extends CustomPainter {
-  _CropOverlayPainter({required this.imageRect, required this.cropRect});
+  _CropOverlayPainter({
+    required this.imageRect,
+    required this.cropRect,
+    this.showRuleOfThirds = false,
+  });
 
   final Rect imageRect;
   final Rect cropRect;
+  final bool showRuleOfThirds;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -211,20 +218,40 @@ class _CropOverlayPainter extends CustomPainter {
       ..strokeWidth = 2;
     canvas.drawRect(cropRect, border);
 
-    const step = 3;
-    for (var i = 1; i < step; i++) {
-      final fx = cropRect.left + cropRect.width * i / step;
-      final fy = cropRect.top + cropRect.height * i / step;
-      canvas.drawLine(
-        Offset(fx, cropRect.top),
-        Offset(fx, cropRect.bottom),
-        border..strokeWidth = 1,
-      );
-      canvas.drawLine(
-        Offset(cropRect.left, fy),
-        Offset(cropRect.right, fy),
-        border..strokeWidth = 1,
-      );
+    if (showRuleOfThirds) {
+      final grid = Paint()
+        ..color = Colors.white.withValues(alpha: 0.35)
+        ..strokeWidth = 1;
+      for (var i = 1; i < 3; i++) {
+        final fx = cropRect.left + cropRect.width * i / 3;
+        final fy = cropRect.top + cropRect.height * i / 3;
+        canvas.drawLine(
+          Offset(fx, cropRect.top),
+          Offset(fx, cropRect.bottom),
+          grid,
+        );
+        canvas.drawLine(
+          Offset(cropRect.left, fy),
+          Offset(cropRect.right, fy),
+          grid,
+        );
+      }
+    } else {
+      const step = 3;
+      for (var i = 1; i < step; i++) {
+        final fx = cropRect.left + cropRect.width * i / step;
+        final fy = cropRect.top + cropRect.height * i / step;
+        canvas.drawLine(
+          Offset(fx, cropRect.top),
+          Offset(fx, cropRect.bottom),
+          border..strokeWidth = 1,
+        );
+        canvas.drawLine(
+          Offset(cropRect.left, fy),
+          Offset(cropRect.right, fy),
+          border..strokeWidth = 1,
+        );
+      }
     }
   }
 

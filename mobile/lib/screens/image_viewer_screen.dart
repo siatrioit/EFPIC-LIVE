@@ -181,6 +181,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
         builder: (_) => ImageEditScreen(
           images: _images,
           initialIndex: _index,
+          galleryFolder: widget.gallery.folderPath,
         ),
       ),
     );
