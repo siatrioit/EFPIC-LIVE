@@ -4,6 +4,11 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.13] — 2026-05-30
+
+### Labots / pievienots
+- Bilžu apstrāde: **Temp** un **Tint** (baltā balansa), **Ēnas**, tiešraides priekšskatījums bīdot slīdņus
+
 ## [0.3.12] — 2026-05-30
 
 ### Pievienots

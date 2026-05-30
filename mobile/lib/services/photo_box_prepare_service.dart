@@ -4,6 +4,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../models/edit_preset.dart';
+import 'image_edit_service.dart';
 
 /// Sagatavo 9×13 cm drukas JPG (Fāze 1 — bez WCM2 nosūtīšanas).
 class PhotoBoxPrepareService {
@@ -30,7 +31,10 @@ class PhotoBoxPrepareService {
     image = img.bakeOrientation(image);
 
     if (preset != null) {
-      image = _adjust(image, preset);
+      image = ImageEditService.instance.process(
+        image,
+        ImageEditParams.fromPreset(preset),
+      );
     }
 
     image = _cropToAspect(image, aspect9x13);
@@ -82,24 +86,4 @@ class PhotoBoxPrepareService {
     return img.copyCrop(image, x: x, y: y, width: w, height: h);
   }
 
-  img.Image _adjust(img.Image image, EditPreset preset) {
-    var out = image;
-    if (preset.brightness != 0 || preset.contrast != 1) {
-      out = img.adjustColor(
-        out,
-        brightness: preset.brightness,
-        contrast: preset.contrast,
-      );
-    }
-    if (preset.saturation != 1) {
-      out = img.adjustColor(out, saturation: preset.saturation);
-    }
-    if (preset.warmth != 0) {
-      out = img.adjustColor(out, hue: preset.warmth * 0.12);
-    }
-    if (preset.rotationDegrees != 0) {
-      out = img.copyRotate(out, angle: preset.rotationDegrees);
-    }
-    return out;
-  }
 }

@@ -5,7 +5,9 @@ class EditPreset {
     this.brightness = 0,
     this.contrast = 1,
     this.saturation = 1,
-    this.warmth = 0,
+    this.temperature = 0,
+    this.tint = 0,
+    this.shadows = 0,
     this.rotationDegrees = 0,
     this.cropAspect,
   });
@@ -17,10 +19,13 @@ class EditPreset {
   /// 0.5 … 2
   final double contrast;
   final double saturation;
-  /// -1 … 1 (siltums / balans)
-  final double warmth;
+  /// Baltā balansa temperatūra (auksts ← 0 → silts).
+  final double temperature;
+  /// Zaļš ← 0 → magenta.
+  final double tint;
+  /// Ēnu pacelšana (-1 … 1).
+  final double shadows;
   final int rotationDegrees;
-  /// null = brīvais; 1 kvadrāts; 4/5; 9/16 u.c.
   final double? cropAspect;
 
   Map<String, dynamic> toJson() => {
@@ -29,28 +34,37 @@ class EditPreset {
         'brightness': brightness,
         'contrast': contrast,
         'saturation': saturation,
-        'warmth': warmth,
+        'temperature': temperature,
+        'tint': tint,
+        'shadows': shadows,
         'rotationDegrees': rotationDegrees,
         'cropAspect': cropAspect,
       };
 
-  factory EditPreset.fromJson(Map<String, dynamic> json) => EditPreset(
-        id: json['id'] as String,
-        name: json['name'] as String? ?? 'Preset',
-        brightness: (json['brightness'] as num?)?.toDouble() ?? 0,
-        contrast: (json['contrast'] as num?)?.toDouble() ?? 1,
-        saturation: (json['saturation'] as num?)?.toDouble() ?? 1,
-        warmth: (json['warmth'] as num?)?.toDouble() ?? 0,
-        rotationDegrees: (json['rotationDegrees'] as num?)?.toInt() ?? 0,
-        cropAspect: (json['cropAspect'] as num?)?.toDouble(),
-      );
+  factory EditPreset.fromJson(Map<String, dynamic> json) {
+    final warmthLegacy = (json['warmth'] as num?)?.toDouble() ?? 0;
+    return EditPreset(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? 'Preset',
+      brightness: (json['brightness'] as num?)?.toDouble() ?? 0,
+      contrast: (json['contrast'] as num?)?.toDouble() ?? 1,
+      saturation: (json['saturation'] as num?)?.toDouble() ?? 1,
+      temperature: (json['temperature'] as num?)?.toDouble() ?? warmthLegacy,
+      tint: (json['tint'] as num?)?.toDouble() ?? 0,
+      shadows: (json['shadows'] as num?)?.toDouble() ?? 0,
+      rotationDegrees: (json['rotationDegrees'] as num?)?.toInt() ?? 0,
+      cropAspect: (json['cropAspect'] as num?)?.toDouble(),
+    );
+  }
 
   EditPreset copyWith({
     String? name,
     double? brightness,
     double? contrast,
     double? saturation,
-    double? warmth,
+    double? temperature,
+    double? tint,
+    double? shadows,
     int? rotationDegrees,
     double? cropAspect,
     bool clearCropAspect = false,
@@ -61,7 +75,9 @@ class EditPreset {
         brightness: brightness ?? this.brightness,
         contrast: contrast ?? this.contrast,
         saturation: saturation ?? this.saturation,
-        warmth: warmth ?? this.warmth,
+        temperature: temperature ?? this.temperature,
+        tint: tint ?? this.tint,
+        shadows: shadows ?? this.shadows,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
         cropAspect: clearCropAspect ? null : (cropAspect ?? this.cropAspect),
       );

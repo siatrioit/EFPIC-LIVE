@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/edit_preset.dart';
+import 'image_edit_service.dart';
 
 class EditPresetRepository {
   EditPresetRepository._();
@@ -44,7 +45,7 @@ class EditPresetRepository {
         EditPreset(
           id: 'default-warm',
           name: 'Silts',
-          warmth: 0.25,
+          temperature: 0.28,
           saturation: 1.05,
         ),
       ];
@@ -66,22 +67,19 @@ class EditPresetRepository {
 
   Future<EditPreset> createFromCurrent({
     required String name,
-    required double brightness,
-    required double contrast,
-    required double saturation,
-    required double warmth,
-    required int rotationDegrees,
-    double? cropAspect,
+    required ImageEditParams params,
   }) async {
     final preset = EditPreset(
       id: _uuid.v4(),
       name: name,
-      brightness: brightness,
-      contrast: contrast,
-      saturation: saturation,
-      warmth: warmth,
-      rotationDegrees: rotationDegrees,
-      cropAspect: cropAspect,
+      brightness: params.brightness,
+      contrast: params.contrast,
+      saturation: params.saturation,
+      temperature: params.temperature,
+      tint: params.tint,
+      shadows: params.shadows,
+      rotationDegrees: params.rotationDegrees,
+      cropAspect: params.cropAspect,
     );
     await add(preset);
     return preset;

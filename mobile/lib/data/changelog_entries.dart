@@ -19,6 +19,16 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.13',
+    date: '2026-05-30',
+    summary: 'Bilžu apstrāde — Temp, Tint, ēnas',
+    items: [
+      'Baltā balansa: atsevišķi Temp un Tint slīdņi',
+      'Ēnu pacelšana (Ēnas)',
+      'Priekšskatījums atjaunojas, kamēr bīdi slīdņus',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.12',
     date: '2026-05-30',
     summary: 'Foto kaste — Fāze 1',
@@ -179,4 +189,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.12';
+const String appVersionLabel = '0.3.13';
