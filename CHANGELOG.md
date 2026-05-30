@@ -4,6 +4,11 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.9] — 2026-05-30
+
+### Labots
+- Galerijas filtri: Ar reitingu ar izvēli (jebkurš vai ★1–★5), Bez reitinga, Krāsas; noņemti ★1–★5 čipi
+
 ## [0.3.8] — 2026-05-30
 
 ### Labots

@@ -5,20 +5,19 @@ enum GalleryViewFilterKind {
   all,
   withRating,
   withoutRating,
-  withColor,
-  byStars,
   byColor,
 }
 
 class GalleryViewFilter {
   const GalleryViewFilter({
     this.kind = GalleryViewFilterKind.all,
-    this.minStars = 1,
+    this.ratingStars,
     this.color = ImageColorLabel.none,
   });
 
   final GalleryViewFilterKind kind;
-  final int minStars;
+  /// [withRating]: `null` = jebkurš reitings (>0), 1–5 = tieši šis.
+  final int? ratingStars;
   final ImageColorLabel color;
 
   String get label {
@@ -26,13 +25,12 @@ class GalleryViewFilter {
       case GalleryViewFilterKind.all:
         return 'Visas';
       case GalleryViewFilterKind.withRating:
+        if (ratingStars != null) {
+          return '★' * ratingStars!;
+        }
         return 'Ar reitingu';
       case GalleryViewFilterKind.withoutRating:
         return 'Bez reitinga';
-      case GalleryViewFilterKind.withColor:
-        return 'Ar krāsu';
-      case GalleryViewFilterKind.byStars:
-        return '★' * minStars;
       case GalleryViewFilterKind.byColor:
         return color.label;
     }
@@ -43,13 +41,12 @@ class GalleryViewFilter {
       case GalleryViewFilterKind.all:
         return true;
       case GalleryViewFilterKind.withRating:
+        if (ratingStars != null) {
+          return image.starRating == ratingStars;
+        }
         return image.starRating > 0;
       case GalleryViewFilterKind.withoutRating:
         return image.starRating == 0;
-      case GalleryViewFilterKind.withColor:
-        return image.colorLabel != ImageColorLabel.none;
-      case GalleryViewFilterKind.byStars:
-        return image.starRating >= minStars;
       case GalleryViewFilterKind.byColor:
         return image.colorLabel == color;
     }
@@ -57,12 +54,13 @@ class GalleryViewFilter {
 
   GalleryViewFilter copyWith({
     GalleryViewFilterKind? kind,
-    int? minStars,
+    int? ratingStars,
+    bool clearRatingStars = false,
     ImageColorLabel? color,
   }) =>
       GalleryViewFilter(
         kind: kind ?? this.kind,
-        minStars: minStars ?? this.minStars,
+        ratingStars: clearRatingStars ? null : (ratingStars ?? this.ratingStars),
         color: color ?? this.color,
       );
 }
