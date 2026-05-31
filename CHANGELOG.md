@@ -4,6 +4,33 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.38] — 2026-05-31
+
+### Pievienots (RAW develop Fāze 3)
+- Mozaīkas pilnas izšķirtspējas eksports lieliem NEF (LibRaw crop + salīmēšana)
+- Picture Control / Adobe RGB heuristiskā 3×3 matrica develop pipeline
+- GPU (hardware Canvas) mozaīku kompozīcijai; `setDevelopOptions` no Flutter
+
+## [0.3.37] — 2026-05-31
+
+### Pabeigts (RAW develop Fāze 2)
+- XMP preseti uz LibRaw as-shot JPEG (ne tikai iegultā JPG)
+- Info panelis: LibRaw develop / pēdējā render avota etiķete
+- `docs/RAW_DEVELOP.md` — Fāze 2 atzīmēta pabeigta; Fāze 3 nākamais
+
+## [0.3.36] — 2026-05-31
+
+### Pievienots (RAW develop Fāze 2 — LibRaw)
+- LibRaw demosaic (AndroidLibRaw) ar automātisku fallback uz iegulto JPG
+- Native develop: absolūtās tone vērtības uz lineāra RGB; Flutter ģeometrija (kadrs) kā iepriekš
+- `syncBaselineFromDart` — ADL/Picture Control baseline sinhronizācija native sesijai
+
+## [0.3.35] — 2026-05-31
+
+### Labots (RAW develop Fāze 1 — kadrs WYSIWYG)
+- Eksports un pilnais preview: taisnošana, pan, zoom kā Kadru režīmā (`CropStraightenExport`)
+- ±90° atsevišķi no taisnošanas slīdņa (kā Lightroom UI)
+
 ## [0.3.34] — 2026-05-31
 
 ### Pievienots (Lightroom Camera Settings — Nikon)

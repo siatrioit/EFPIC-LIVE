@@ -13,8 +13,8 @@ object RawDevelopCoordinator {
     const val PREVIEW_JPEG_QUALITY = 88
     const val EXPORT_JPEG_QUALITY = 92
 
-    /** Fāze 2: swap to LibRawDevelopEngine when NDK is linked. */
-    private val engine: RawDevelopEngine = EmbeddedProxyDevelopEngine()
+    /** Fāze 2: LibRaw demosaic when linked; else embedded JPG proxy. */
+    private val engine: RawDevelopEngine = FallbackDevelopEngine()
 
     @JvmStatic
     fun developPreview(session: EditSessionState): RawDevelopEngine.DevelopResult =

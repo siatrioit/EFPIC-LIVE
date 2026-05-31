@@ -5,6 +5,8 @@ import android.os.Looper
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import lv.edgarsfoto.efpic_live.raw.develop.DevelopOptions
+import lv.edgarsfoto.efpic_live.raw.develop.LibRawSupport
 import lv.edgarsfoto.efpic_live.raw.develop.RawDevelopCoordinator
 import java.util.concurrent.Executors
 
@@ -33,6 +35,14 @@ class RawDevelopPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHan
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isAvailable" -> result.success(true)
+            "isLibRawLinked" -> result.success(LibRawSupport.isLinked())
+            "setDevelopOptions" -> {
+                DevelopOptions.tiledExportEnabled =
+                    call.argument<Boolean>("tiledExportEnabled") ?: true
+                DevelopOptions.useGpuTileBlit =
+                    call.argument<Boolean>("useGpuTileBlit") ?: true
+                result.success(null)
+            }
             "renderPreview" -> runDevelop(call, result, preview = true)
             "renderExport" -> runDevelop(call, result, preview = false)
             else -> result.notImplemented()

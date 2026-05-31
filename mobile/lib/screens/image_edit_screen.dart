@@ -199,6 +199,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             source: src,
             xmpPath: xmp.xmpPath,
             fineTune: _params,
+            cameraBaseline: _baselineParams,
             mode: _previewModeForTool(_activeTool),
           )
         : await ImageEditService.instance.renderPreview(
@@ -248,6 +249,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             source: src,
             xmpPath: xmp.xmpPath,
             params: _params,
+            cameraBaseline: _baselineParams,
           )
         : await ImageEditService.instance.renderRotatedBase(
             source: src,
@@ -530,6 +532,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         xmpPath: _activeXmpPreset!.xmpPath,
         destPath: dest,
         fineTune: _params,
+        cameraBaseline: _baselineParams,
       );
     } else {
       ok = await ImageEditService.instance.applyAndSave(

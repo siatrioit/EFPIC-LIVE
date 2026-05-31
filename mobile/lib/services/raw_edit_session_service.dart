@@ -24,6 +24,36 @@ class RawEditSessionService {
     }
   }
 
+  /// Sync Dart parser baseline (ADL, Picture Control) into native LibRaw session.
+  Future<void> syncBaselineFromDart({
+    required String rawPath,
+    required RawCameraBaseline baseline,
+  }) async {
+    if (!isSupported) return;
+    try {
+      await _channel.invokeMethod<void>('syncBaselineFromDart', {
+        'rawPath': rawPath,
+        'baseline': {
+          'exposureEv': baseline.exposureEv,
+          'kelvin': baseline.kelvin,
+          'tint': baseline.tint,
+          'contrast': baseline.contrast,
+          'shadows': baseline.shadows,
+          'highlights': baseline.highlights,
+          'sharpness': baseline.sharpness,
+          'saturation': baseline.saturation,
+          'pictureControl': baseline.pictureControl,
+          'cameraModel': baseline.cameraModel,
+          'rawWidth': baseline.rawWidth,
+          'rawHeight': baseline.rawHeight,
+          'sources': baseline.sources,
+        },
+      });
+    } catch (e) {
+      debugPrint('RawEditSessionService.syncBaselineFromDart: $e');
+    }
+  }
+
   /// Opens session: extracts metadata from [rawPath], caches native [EditSessionState].
   Future<RawCameraBaseline?> initializeSession({
     required String rawPath,

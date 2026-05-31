@@ -19,6 +19,44 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.38',
+    date: '2026-05-31',
+    summary: 'RAW Fāze 3 — mozaīkas + GPU',
+    items: [
+      'Lielu NEF eksports mozaīkās (OOM drošāk)',
+      'Picture Control matrica develop pipeline',
+      'GPU kompozīcija mozaīkām',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.37',
+    date: '2026-05-31',
+    summary: 'RAW Fāze 2 pabeigta',
+    items: [
+      'XMP uz LibRaw as-shot bāzes (ne iegultā JPG)',
+      'Info: LibRaw develop + render avots',
+      'Gatavs pāriet uz Fāzi 3 (tiles, GPU)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.36',
+    date: '2026-05-31',
+    summary: 'RAW Fāze 2 — LibRaw',
+    items: [
+      'NEF develop no sensora (LibRaw), fallback uz proxy JPG',
+      'Preview/eksports caur vienu native motoru + Dart kadrs',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.35',
+    date: '2026-05-31',
+    summary: 'Kadrs WYSIWYG (Fāze 1)',
+    items: [
+      'Saglabāšana = priekšskatījums: taisnošana, pan, zoom',
+      '±90° un taisnošanas slīdnis atsevišķi',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.34',
     date: '2026-05-31',
     summary: 'LR Camera Settings (Nikon)',
@@ -395,4 +433,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.32';
+const String appVersionLabel = '0.3.38';

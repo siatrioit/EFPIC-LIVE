@@ -1,5 +1,7 @@
 package lv.edgarsfoto.efpic_live.raw
 
+import lv.edgarsfoto.efpic_live.processing.LinearImage
+
 /**
  * Approximate color-space / Picture Control matrices (sensor → display linear).
  * Full ICC would be ideal; these are heuristic 3×3 RGB transforms.
@@ -66,6 +68,26 @@ object ColorProfileMatrix {
         0.02f, 0.96f, 0.02f,
         0.02f, 0.02f, 0.96f,
     )
+
+    /** Heuristiska 3×3 uz scene-linear RGB (Fāze 3 — Picture Control). */
+    @JvmStatic
+    fun applyToLinear(image: LinearImage, matrix: FloatArray) {
+        if (matrix.size != 9 || isIdentity(matrix)) return
+        image.mapPixelsParallel { r, g, b ->
+            Triple(
+                matrix[0] * r + matrix[1] * g + matrix[2] * b,
+                matrix[3] * r + matrix[4] * g + matrix[5] * b,
+                matrix[6] * r + matrix[7] * g + matrix[8] * b,
+            )
+        }
+    }
+
+    private fun isIdentity(m: FloatArray): Boolean {
+        for (i in m.indices) {
+            if (kotlin.math.abs(m[i] - IDENTITY[i]) > 0.001f) return false
+        }
+        return true
+    }
 
     private fun multiply(a: FloatArray, b: FloatArray): FloatArray {
         val out = FloatArray(9)

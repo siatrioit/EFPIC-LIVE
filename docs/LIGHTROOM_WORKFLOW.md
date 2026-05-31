@@ -85,7 +85,7 @@ Lightroom maina arī **luminance noise reduction** (mums UI slīdnis vēl nav). 
 
 - XMP: `XmpParser.kt`, `LightroomRenderPipeline.kt` (Android).
 - Camera Settings: `nikon_camera_settings_mapper.dart`, `raw_camera_settings_parser.dart`.
-- Avots develop: vēl **iegultais JPG** (fāze 2: LibRaw).
+- Develop: **LibRaw** demosaic + native pipeline; XMP bāze arī no LibRaw as-shot (fallback → iegults JPG).
 
 ## Atsauces
 

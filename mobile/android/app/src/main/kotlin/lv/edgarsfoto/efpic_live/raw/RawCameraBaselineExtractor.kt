@@ -22,7 +22,10 @@ object RawCameraBaselineExtractor {
         }
 
         val sources = mutableListOf<String>()
+        var compensationEv = 0f
         var exposureEv = 0f
+        var highlights = 0f
+        var adlCode: Int? = null
         var kelvin = 6500f
         var tint = 0f
         var rGain = 1f
@@ -43,7 +46,7 @@ object RawCameraBaselineExtractor {
             cameraModel = exif.getAttribute(ExifInterface.TAG_MODEL)
 
             parseExposureBias(exif.getAttribute(ExifInterface.TAG_EXPOSURE_BIAS_VALUE))?.let {
-                exposureEv = it
+                compensationEv = it
                 sources.add("exif:ExposureBiasValue")
             }
 
@@ -75,7 +78,7 @@ object RawCameraBaselineExtractor {
                 if (tiff.valid) {
                     if (!sources.contains("exif:ExposureBiasValue")) {
                         tiff.sRationalExif(0x9204)?.let {
-                            exposureEv = it.coerceIn(-5f, 5f)
+                            compensationEv = it.coerceIn(-5f, 5f)
                             sources.add("tiff:ExposureBiasValue")
                         }
                     }
@@ -107,6 +110,10 @@ object RawCameraBaselineExtractor {
                         nikon.blueGain?.let { bGain = it }
                         if (nikon.redGain != null) sources.add("nikon:WbMultipliers")
 
+                        nikon.activeDLightingCode?.let { code ->
+                            adlCode = code
+                            sources.add("nikon:ActiveDLighting(0x0022)")
+                        }
                         nikon.pictureControl?.let { pc ->
                             pictureControl = pc.name
                             contrast = pc.contrast
@@ -119,29 +126,39 @@ object RawCameraBaselineExtractor {
             }
         }
 
-        if (sources.isEmpty()) {
+        val mapped = NikonDevelopBaselineMapper.apply(
+            CameraBaseline(
+                exposureEv = exposureEv,
+                kelvin = kelvin,
+                tint = tint,
+                redGain = rGain,
+                greenGain = gGain,
+                blueGain = bGain,
+                contrast = contrast,
+                shadows = shadows,
+                highlights = highlights,
+                sharpness = sharpness,
+                colorSpace = colorSpace,
+                pictureControl = pictureControl,
+                cameraModel = cameraModel,
+                rawWidth = rawW,
+                rawHeight = rawH,
+                sources = sources,
+            ),
+            adlCode = adlCode,
+            compensationEv = compensationEv,
+        )
+
+        if (mapped.sources.isEmpty()) {
             Log.w(TAG, "No metadata from RAW, using neutral baseline: $rawPath")
         } else {
-            Log.d(TAG, "Baseline $rawPath EV=$exposureEv K=$kelvin tint=$tint sources=$sources")
+            Log.d(
+                TAG,
+                "Baseline $rawPath developEV=${mapped.exposureEv} comp=$compensationEv K=${mapped.kelvin}",
+            )
         }
 
-        return CameraBaseline(
-            exposureEv = exposureEv,
-            kelvin = kelvin,
-            tint = tint,
-            redGain = rGain,
-            greenGain = gGain,
-            blueGain = bGain,
-            contrast = contrast,
-            shadows = shadows,
-            sharpness = sharpness,
-            colorSpace = colorSpace,
-            pictureControl = pictureControl,
-            cameraModel = cameraModel,
-            rawWidth = rawW,
-            rawHeight = rawH,
-            sources = sources,
-        )
+        return mapped
     }
 
     private fun parseExposureBias(raw: String?): Float? {
@@ -360,6 +377,7 @@ internal object NikonMakerNoteParser {
         val redGain: Float? = null,
         val greenGain: Float? = null,
         val blueGain: Float? = null,
+        val activeDLightingCode: Int? = null,
         val pictureControl: PictureControl? = null,
     )
 
@@ -408,7 +426,9 @@ internal object NikonMakerNoteParser {
             if (kelvin == null && t in 2000..50000) kelvin = t.toFloat()
         }
 
-        return Parsed(kelvin, tint, rGain, gGain, bGain, pc)
+        val adl = uint16AtIfd(mn, ifd0, 0x0022, le)
+
+        return Parsed(kelvin, tint, rGain, gGain, bGain, adl, pc)
     }
 
     private fun parsePictureControl(blob: ByteArray): PictureControl? {

@@ -53,6 +53,34 @@ object RawEditSessionManager {
         }
     }
 
+    /**
+     * Overwrite native baseline with Dart parser (ADL develop EV, Picture Control, …).
+     */
+    @JvmStatic
+    fun syncBaselineFromDart(rawPath: String, map: Map<String, Any?>): EditSessionState? {
+        val prev = sessions[rawPath] ?: return null
+        val b = prev.cameraBaseline
+        val sources = (map["sources"] as? List<*>)?.map { it.toString() } ?: b.sources
+        val nextBaseline = b.copy(
+            exposureEv = (map["exposureEv"] as? Number)?.toFloat() ?: b.exposureEv,
+            kelvin = (map["kelvin"] as? Number)?.toFloat() ?: b.kelvin,
+            tint = (map["tint"] as? Number)?.toFloat() ?: b.tint,
+            contrast = (map["contrast"] as? Number)?.toFloat() ?: b.contrast,
+            shadows = (map["shadows"] as? Number)?.toFloat() ?: b.shadows,
+            highlights = (map["highlights"] as? Number)?.toFloat() ?: b.highlights,
+            sharpness = (map["sharpness"] as? Number)?.toFloat() ?: b.sharpness,
+            saturation = (map["saturation"] as? Number)?.toFloat() ?: b.saturation,
+            pictureControl = map["pictureControl"] as? String ?: b.pictureControl,
+            cameraModel = map["cameraModel"] as? String ?: b.cameraModel,
+            rawWidth = (map["rawWidth"] as? Number)?.toInt() ?: b.rawWidth,
+            rawHeight = (map["rawHeight"] as? Number)?.toInt() ?: b.rawHeight,
+            sources = sources,
+        )
+        val next = prev.copy(cameraBaseline = nextBaseline)
+        sessions[rawPath] = next
+        return next
+    }
+
     @JvmStatic
     fun updateUserAdjustments(rawPath: String, user: UserAdjustments): EditSessionState? {
         val prev = sessions[rawPath] ?: return null

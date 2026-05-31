@@ -5,6 +5,7 @@ import lv.edgarsfoto.efpic_live.processing.LinearImage
 import lv.edgarsfoto.efpic_live.processing.SharpenEngine
 import lv.edgarsfoto.efpic_live.processing.WhiteBalanceMath
 import lv.edgarsfoto.efpic_live.processing.WhiteBalanceProcessor
+import lv.edgarsfoto.efpic_live.raw.ColorProfileMatrix
 import lv.edgarsfoto.efpic_live.raw.EditSessionState
 import lv.edgarsfoto.efpic_live.raw.WhiteBalanceController
 import kotlin.math.pow
@@ -57,6 +58,12 @@ object EditDevelopPipeline {
                 )
             }
         } else {
+            val profileMatrix = ColorProfileMatrix.forProfile(
+                e.colorSpace,
+                e.pictureControl,
+            )
+            ColorProfileMatrix.applyToLinear(image, profileMatrix)
+
             val gains = WhiteBalanceMath.vonKriesGains(
                 e.kelvin,
                 e.tint,

@@ -38,26 +38,41 @@ Flutter **nekoordinē pikseļus** RAW režīmā — tikai slīdņus un bitmap no
 
 - [x] `developImage()` — **vienīgais** ceļš Flutter priekšskatam un `_edited.jpg`
 - [x] Delta pret As Shot (visi tone slīdņi + WB)
-- [x] Kadrs/rotate iekļauts eksportā un pilnajā preview
+- [x] Kadrs/rotate (±90°, taisnošana, pan, zoom) — WYSIWYG eksportā un preview
 - [x] **Lightroom `.xmp`** + nelielas korekcijas — skat. [`LIGHTROOM_WORKFLOW.md`](LIGHTROOM_WORKFLOW.md)
-- [ ] Native `RawDevelopService` atslēgts līdz Fāze 2 (LibRaw) — izvairās no divām formulām
+- [x] Dart `developImage()` — WYSIWYG (ģeometrija Dart, krāsa native kad LibRaw)
+- [x] XMP bāze no LibRaw as-shot JPEG (`resolveXmpSourcePath`), ne tikai iegultā JPG
 
-**Rezultāts:** WYSIWYG starp ekrānu un saglabāto JPG. Avots vēl proxy JPG; XMP render no iegultā JPG.
+**Rezultāts:** WYSIWYG starp ekrānu un saglabāto JPG.
 
-### Fāze 2 — Īsts RAW demosaic (galvenais Lightroom solis)
+### Fāze 2 — Īsts RAW demosaic (pabeigta)
 
-- LibRaw (NDK) vai licencēts SDK
-- `LibRawDevelopEngine` aizstāj `EmbeddedProxyDevelopEngine`
-- Iegultais JPG tikai loading thumbnail
-- Absolūtā WB/tones uz lineāra RAW (ne delta uz iegultā JPG)
+- [x] LibRaw (JitPack `AndroidLibRaw` 2.0.5) + NDK `libandroidraw`
+- [x] `LibRawDevelopEngine` + `FallbackDevelopEngine` (kļūda → proxy JPG)
+- [x] `EditDevelopPipeline` ar `useEmbeddedProxyMode = false` (absolūtās vērtības)
+- [x] Flutter: `RawDevelopService` + `developImage()` izmanto LibRaw, ja pieejams
+- [x] Dart baseline sinhronizācija native sesijai (`syncBaselineFromDart`)
+- [x] Iegultais JPG — galerijas `_emb.jpg` / fallback; develop + XMP no LibRaw
+- [x] WB: `setUserMul` no baseline vai `setCameraWhiteBalance(true)`; tone slīdņi caur pipeline
+- [x] UI: `describeEditSource` + `lastDevelopSource` (`libraw_demosaic` / `embedded_jpeg_proxy`)
 
-**Rezultāts:** Klients saņem developētu attēlu no sensora datiem.
+**Rezultāts:** NEF develop no sensora datiem (ne tikai embedded preview), ar automātisku fallback. **Gatavs Fāzei 3.**
 
-### Fāze 3 — Kvalitāte un ātrums
+### Fāze 3 — Kvalitāte un ātrums (pabeigta)
 
-- Tile render lieliem NEF (Z8)
-- GPU / RenderScript opcija
-- Kameras profili (Nikon Picture Control matricas jau daļēji ir)
+- [x] Mozaīkas eksports (`TiledLibRawDevelopEngine`, LibRaw `setCropBox`, 1536 px)
+- [x] Automātiski lieliem NEF (≥4000 px garā mala vai ≥14 MP)
+- [x] GPU kompozīcija — hardware Canvas mozaīku salīmēšanai (`libraw_tiled_demosaic_gpu`)
+- [x] Picture Control / color space — `ColorProfileMatrix.applyToLinear` pirms WB
+- [x] Flutter: `RawDevelopService.setDevelopOptions(tiledExportEnabled, useGpuTileBlit)`
+
+**Rezultāts:** Z8 pilna izšķirtspēja bez viena gigantiska `LinearImage`; profila matrica pipeline.
+
+### Fāze 4 — (nākotne)
+
+- Progresa indikators eksportam
+- LibRaw ROI bez pilna atkārtota `open` uz mozaīku
+- Pilns GPU tone/HSL (RenderEffect / compute)
 
 ## Regresijas (RELEASE.md)
 

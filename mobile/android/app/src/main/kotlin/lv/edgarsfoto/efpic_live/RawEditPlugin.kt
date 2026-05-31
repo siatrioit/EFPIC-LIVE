@@ -90,6 +90,18 @@ class RawEditPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHandle
                 RawEditSessionManager.invalidate(call.argument<String>("rawPath"))
                 result.success(null)
             }
+            "syncBaselineFromDart" -> {
+                val rawPath = call.argument<String>("rawPath")
+                @Suppress("UNCHECKED_CAST")
+                val map = call.argument<Map<String, Any?>>("baseline")
+                if (rawPath.isNullOrBlank() || map == null) {
+                    result.error("ARG", "rawPath and baseline required", null)
+                    return
+                }
+                val state = RawEditSessionManager.syncBaselineFromDart(rawPath, map)
+                if (state == null) result.error("SESSION", "No RAW session", null)
+                else result.success(RawEditSessionManager.toFlutterMap(state))
+            }
             "setWhiteBalance" -> {
                 val rawPath = call.argument<String>("rawPath")
                 val kelvin = call.argument<Number>("kelvin")?.toFloat()

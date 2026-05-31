@@ -18,10 +18,12 @@ import 'shadows_adjustment.dart';
 import 'sharpness_adjustment.dart';
 import '../models/raw_camera_baseline.dart';
 import 'raw_camera_settings_parser.dart';
+import 'raw_develop_service.dart';
 import 'raw_edit_session_service.dart';
 import 'raw_preview_queue.dart';
 import 'lightroom_xmp_service.dart';
 import 'white_balance_adjustment.dart';
+import '../utils/crop_straighten_export.dart';
 import '../utils/crop_straighten_math.dart';
 import '../utils/image_orientation.dart';
 import '../utils/image_paths.dart';
@@ -284,6 +286,76 @@ class ImageEditService {
 
   static const int previewMaxLongEdge = 1400;
 
+  /// LibRaw as-shot JPEG cache for XMP input (key = NEF path).
+  final Map<String, String> _xmpLibRawBaseByRaw = {};
+
+  void _invalidateXmpLibRawBase(String rawPath) {
+    final cached = _xmpLibRawBaseByRaw.remove(rawPath);
+    if (cached == null) return;
+    try {
+      File(cached).deleteSync();
+    } catch (_) {}
+  }
+
+  /// XMP piemērošanas avots: LibRaw as-shot JPEG kad pieejams, citādi [source.path].
+  Future<String> resolveXmpSourcePath({
+    required EditSource source,
+    ImageEditParams? cameraBaseline,
+    int? maxLongEdge,
+  }) async {
+    final rawPath = source.rawSourcePath;
+    if (rawPath == null) return source.path;
+    if (cameraBaseline == null) return source.path;
+    if (!await File(rawPath).exists()) return source.path;
+    if (!await RawDevelopService.instance.isLibRawLinked()) {
+      return source.path;
+    }
+    if (!await RawDevelopService.instance.isAvailable()) {
+      return source.path;
+    }
+
+    final cached = _xmpLibRawBaseByRaw[rawPath];
+    if (cached != null && await File(cached).exists()) return cached;
+
+    final written = await _writeLibRawXmpBase(
+      rawPath: rawPath,
+      baseline: cameraBaseline,
+      maxLongEdge: maxLongEdge,
+    );
+    if (written != null) {
+      _xmpLibRawBaseByRaw[rawPath] = written;
+      return written;
+    }
+    return source.path;
+  }
+
+  Future<String?> _writeLibRawXmpBase({
+    required String rawPath,
+    required ImageEditParams baseline,
+    int? maxLongEdge,
+  }) async {
+    final usePreview = maxLongEdge != null && maxLongEdge > 0;
+    final result = usePreview
+        ? await RawDevelopService.instance.renderPreview(
+            rawPath: rawPath,
+            params: baseline,
+            baseline: baseline,
+          )
+        : await RawDevelopService.instance.renderExport(
+            rawPath: rawPath,
+            params: baseline,
+            baseline: baseline,
+          );
+    if (result == null) return null;
+    final dir = await getTemporaryDirectory();
+    final path = p.join(
+      dir.path,
+      'libraw_xmp_${p.basenameWithoutExtension(rawPath)}.jpg',
+    );
+    await File(path).writeAsBytes(result.bytes);
+    return path;
+  }
+
   /// Oriģinālais fails (ne `_edited.jpg`), lai pēc saglabāšanas var atgriezties.
   String baselineLocalPath(
     String localPath, {
@@ -419,9 +491,14 @@ class ImageEditService {
     );
 
     final workingName = p.basename(source.path);
+    final libRawLinked = rawPath != null &&
+        await RawDevelopService.instance.isLibRawLinked();
+    final developSource = RawDevelopService.instance.lastDevelopSource;
     final workingFormat = source.kind == EditSourceKind.directJpeg
         ? 'JPG'
-        : 'Iegults JPG';
+        : libRawLinked
+            ? 'LibRaw develop'
+            : 'Iegults JPG';
 
     int? rawBytes;
     int? workBytes;
@@ -505,10 +582,25 @@ class ImageEditService {
           originalFormatLabel: originalFormat,
           workingFileName: workingName,
           workingFormatLabel: workingFormat,
-          headline: 'RAW fails — apstrāde uz iegultā priekšskata',
+          headline: libRawLinked
+              ? 'RAW fails — LibRaw develop (sensors dati)'
+              : 'RAW fails — apstrāde uz iegultā priekšskata',
           detailLines: [
-            'Pilns RAW sensors netiek attīstīts — lietots kameras iegults JPG.',
-            'Slīdņi sākas ar kameras vērtībām; izmaiņas = delta pret As Shot.',
+            if (libRawLinked) ...[
+              'Demosaic no NEF (LibRaw); slīdņi = delta pret kameras As Shot.',
+              'Galerijas sīktēls joprojām no iegultā JPG; XMP bāze no LibRaw.',
+              if (developSource == 'embedded_jpeg_proxy')
+                'Pēdējais render: fallback uz iegulto JPG (LibRaw kļūda).',
+              if (developSource == 'libraw_demosaic')
+                'Pēdējais render: LibRaw demosaic.',
+              if (developSource == 'libraw_tiled_demosaic')
+                'Pēdējais render: LibRaw mozaīkas eksports (Z8/liels NEF).',
+              if (developSource == 'libraw_tiled_demosaic_gpu')
+                'Pēdējais render: LibRaw mozaīkas + GPU kompozīcija.',
+            ] else ...[
+              'Pilns RAW sensors netiek attīstīts — lietots kameras iegults JPG.',
+              'Slīdņi sākas ar kameras vērtībām; izmaiņas = delta pret As Shot.',
+            ],
             ...rawDetailExtras(),
             'Saglabājums: jauns JPG blakus RAW (RAW paliek nemainīts).',
           ],
@@ -639,6 +731,10 @@ class ImageEditService {
     if (rawPath != null && await File(rawPath).exists()) {
       await RawEditSessionService.instance.invalidateSession(rawPath);
       RawPreviewQueue.instance.invalidate(rawPath);
+      _invalidateXmpLibRawBase(rawPath);
+      if (await RawDevelopService.instance.isLibRawLinked()) {
+        await RawDevelopService.instance.setDevelopOptions();
+      }
     }
 
     if (rawPath != null &&
@@ -662,6 +758,12 @@ class ImageEditService {
       final params = _paramsFromCameraSettings(settings);
       final dartMeta = _baselineFromDartSettings(settings);
       final mergedMeta = _mergeCameraMeta(meta, dartMeta);
+      if (rawPath != null && meta != null) {
+        await RawEditSessionService.instance.syncBaselineFromDart(
+          rawPath: rawPath,
+          baseline: mergedMeta,
+        );
+      }
       return (params: params, baseline: params, meta: mergedMeta);
     }
 
@@ -751,6 +853,28 @@ class ImageEditService {
     bool includeColorProcess = true,
     int? maxLongEdge,
   }) async {
+    final baseline = cameraBaseline ?? params;
+    final rawPath = source.rawSourcePath;
+
+    if (includeColorProcess &&
+        rawPath != null &&
+        await File(rawPath).exists() &&
+        await RawDevelopService.instance.isLibRawLinked()) {
+      final native = await _developColorFromLibRaw(
+        rawPath: rawPath,
+        params: params,
+        baseline: baseline,
+        maxLongEdge: maxLongEdge,
+      );
+      if (native != null) {
+        var image = native;
+        if (includeGeometry) {
+          image = applyGeometry(image, params);
+        }
+        return image;
+      }
+    }
+
     var image = await _decodeOriented(source);
     if (image == null) return null;
     if (maxLongEdge != null) {
@@ -765,16 +889,45 @@ class ImageEditService {
     return image;
   }
 
+  /// LibRaw demosaic + native tone pipeline (Fāze 2); geometry stays in Dart.
+  Future<img.Image?>? _developColorFromLibRaw({
+    required String rawPath,
+    required ImageEditParams params,
+    required ImageEditParams baseline,
+    int? maxLongEdge,
+  }) async {
+    if (!await RawDevelopService.instance.isAvailable()) return null;
+    final result = maxLongEdge == null
+        ? await RawDevelopService.instance.renderExport(
+            rawPath: rawPath,
+            params: params,
+            baseline: baseline,
+          )
+        : await RawDevelopService.instance.renderPreview(
+            rawPath: rawPath,
+            params: params,
+            baseline: baseline,
+          );
+    if (result == null) return null;
+    return img.decodeJpg(result.bytes);
+  }
+
   /// Lightroom `.xmp` → nelielas korekcijas (slīdņi no 0) → priekšskats.
   Future<ImagePreviewResult?> renderPreviewWithXmp({
     required EditSource source,
     required String xmpPath,
     required ImageEditParams fineTune,
+    ImageEditParams? cameraBaseline,
     EditPreviewMode mode = EditPreviewMode.full,
   }) async {
+    final xmpInput = await resolveXmpSourcePath(
+      source: source,
+      cameraBaseline: cameraBaseline,
+      maxLongEdge: previewMaxLongEdge,
+    );
     final xmpBytes = await LightroomXmpService.instance.renderPreviewJpeg(
       xmpPath: xmpPath,
-      sourcePath: source.path,
+      sourcePath: xmpInput,
       maxLongEdge: previewMaxLongEdge,
     );
     if (xmpBytes == null) return null;
@@ -800,7 +953,12 @@ class ImageEditService {
     required String xmpPath,
     required String destPath,
     required ImageEditParams fineTune,
+    ImageEditParams? cameraBaseline,
   }) async {
+    final xmpInput = await resolveXmpSourcePath(
+      source: source,
+      cameraBaseline: cameraBaseline,
+    );
     final tempDir = await getTemporaryDirectory();
     final tempPath = p.join(
       tempDir.path,
@@ -808,7 +966,7 @@ class ImageEditService {
     );
     final xmpOk = await LightroomXmpService.instance.applyToFile(
       xmpPath: xmpPath,
-      sourcePath: source.path,
+      sourcePath: xmpInput,
       destPath: tempPath,
     );
     if (!xmpOk) {
@@ -845,10 +1003,16 @@ class ImageEditService {
     required EditSource source,
     required String xmpPath,
     required ImageEditParams params,
+    ImageEditParams? cameraBaseline,
   }) async {
+    final xmpInput = await resolveXmpSourcePath(
+      source: source,
+      cameraBaseline: cameraBaseline,
+      maxLongEdge: previewMaxLongEdge,
+    );
     final xmpBytes = await LightroomXmpService.instance.renderPreviewJpeg(
       xmpPath: xmpPath,
-      sourcePath: source.path,
+      sourcePath: xmpInput,
       maxLongEdge: previewMaxLongEdge,
     );
     if (xmpBytes == null) return null;
@@ -913,28 +1077,36 @@ class ImageEditService {
   }
 
   /// Orientācija + pagrieziens + izgriešana (priekšskatījumam un saglabāšanai).
+  ///
+  /// ±90° atsevišķi; taisnošana/pan/zoom — tā pat kā [ImageEditCropCanvas] (WYSIWYG).
   img.Image applyGeometry(img.Image image, ImageEditParams p) {
     var out = image;
-    final angle = p.totalRotationDegrees;
-    if (angle.abs() > 0.01) {
-      out = _rotate(out, angle, p.constrainAfterRotate);
+    final quarters = p.rotationQuarterTurns % 4;
+    if (quarters != 0) {
+      out = img.copyRotate(out, angle: quarters * 90.0);
     }
 
-    final hasManualCrop = p.cropWidth < 0.995 ||
-        p.cropHeight < 0.995 ||
-        p.cropLeft > 0.005 ||
-        p.cropTop > 0.005;
-    if (hasManualCrop) {
-      final x =
-          (out.width * p.cropLeft).round().clamp(0, out.width - 1);
-      final y =
-          (out.height * p.cropTop).round().clamp(0, out.height - 1);
-      final w =
-          (out.width * p.cropWidth).round().clamp(1, out.width - x);
-      final h =
-          (out.height * p.cropHeight).round().clamp(1, out.height - y);
-      out = img.copyCrop(out, x: x, y: y, width: w, height: h);
-      return out;
+    if (CropStraightenExport.needsWarp(
+      cropLeft: p.cropLeft,
+      cropTop: p.cropTop,
+      cropWidth: p.cropWidth,
+      cropHeight: p.cropHeight,
+      rotationFineDegrees: p.rotationFineDegrees,
+      panXNorm: p.cropPanX,
+      panYNorm: p.cropPanY,
+      userScale: p.cropUserScale,
+    )) {
+      return CropStraightenExport.apply(
+        out,
+        cropLeft: p.cropLeft,
+        cropTop: p.cropTop,
+        cropWidth: p.cropWidth,
+        cropHeight: p.cropHeight,
+        rotationFineDegrees: p.rotationFineDegrees,
+        panXNorm: p.cropPanX,
+        panYNorm: p.cropPanY,
+        userScale: p.cropUserScale,
+      );
     }
 
     final aspect = _effectiveCropAspect(p);
@@ -1099,41 +1271,6 @@ class ImageEditService {
 
   @Deprecated('Use cropAspectPresets')
   static const socialAspects = cropAspectPresets;
-
-  img.Image _rotate(img.Image src, double angle, bool constrain) {
-    if (angle.abs() < 0.01) return src;
-    if (!constrain) {
-      return img.copyRotate(src, angle: angle);
-    }
-
-    final scale = CropStraightenMath.minCoverScale(
-      imageWidth: src.width.toDouble(),
-      imageHeight: src.height.toDouble(),
-      cropWidth: src.width.toDouble(),
-      cropHeight: src.height.toDouble(),
-      thetaDegrees: angle,
-    );
-    final sw = (src.width * scale).round().clamp(1, 20000);
-    final sh = (src.height * scale).round().clamp(1, 20000);
-    var scaled = img.copyResize(src, width: sw, height: sh);
-    var rotated = img.copyRotate(scaled, angle: angle);
-
-    final targetAspect = src.width / src.height;
-    final rw = rotated.width;
-    final rh = rotated.height;
-    int cw;
-    int ch;
-    if (rw / rh > targetAspect) {
-      ch = rh;
-      cw = (rh * targetAspect).round().clamp(1, rw);
-    } else {
-      cw = rw;
-      ch = (rw / targetAspect).round().clamp(1, rh);
-    }
-    final x = ((rw - cw) / 2).round().clamp(0, rw - 1);
-    final y = ((rh - ch) / 2).round().clamp(0, rh - 1);
-    return img.copyCrop(rotated, x: x, y: y, width: cw, height: ch);
-  }
 
   img.Image _applyExifOrientation(img.Image image, int orientation) {
     switch (orientation) {

@@ -2,7 +2,9 @@
 
 Portatīvā foto kaste pasākumam: operators staigā ar Android tālruni, fotografē cilvēkus caur **Nikon USB**, uzklāj **preset + rāmi**, pēc apstiprinājuma drukā uz **DNP DS620** formātā **9×13 cm**.
 
-> Statuss: **plānošana** — nav ieviests kodā. Esošie režīmi: Live, Download.
+> Statuss: **atlikts malā** (Fāze 1 MVP kodā ir, bet **neaktīva izstrāde**).  
+> **Nav saistīts** ar bilžu astrādes / RAW / Lightroom moduli.  
+> **Aktīvā izstrāde:** tikai **Live** un **Download**.
 
 ---
 
