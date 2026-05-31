@@ -5,11 +5,24 @@ import 'dart:typed_data';
 import 'package:exif/exif.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../models/edit_preset.dart';
 import '../models/edit_source_info.dart';
+import 'highlights_adjustment.dart';
 import 'image_info_service.dart';
 import 'raw_preview_service.dart';
+import 'contrast_adjustment.dart';
+import 'exposure_adjustment.dart';
+import 'shadows_adjustment.dart';
+import 'sharpness_adjustment.dart';
+import '../models/raw_camera_baseline.dart';
+import 'raw_camera_settings_parser.dart';
+import 'raw_edit_session_service.dart';
+import 'raw_preview_queue.dart';
+import 'lightroom_xmp_service.dart';
+import 'white_balance_adjustment.dart';
+import '../utils/crop_straighten_math.dart';
 import '../utils/image_orientation.dart';
 import '../utils/image_paths.dart';
 
@@ -55,13 +68,14 @@ class EditSource {
 
 class ImageEditParams {
   const ImageEditParams({
-    this.brightness = 0,
-    this.contrast = 1,
+    this.exposure = ExposureAdjustment.neutralEv,
+    this.contrast = ContrastAdjustment.neutral,
     this.saturation = 1,
-    this.temperature = 0,
+    this.temperature = WhiteBalanceAdjustment.neutralKelvin,
     this.tint = 0,
     this.shadows = 0,
     this.highlights = 0,
+    this.sharpness = SharpnessAdjustment.amountMin,
     this.rotationQuarterTurns = 0,
     this.rotationFineDegrees = 0,
     this.constrainAfterRotate = true,
@@ -72,15 +86,21 @@ class ImageEditParams {
     this.cropTop = 0,
     this.cropWidth = 1,
     this.cropHeight = 1,
+    this.cropPanX = 0,
+    this.cropPanY = 0,
+    this.cropUserScale = 1,
   });
 
-  final double brightness;
+  /// Ekspozīcija EV (−5…+5 f-stops); 0 = 2^0 = ×1.
+  final double exposure;
   final double contrast;
   final double saturation;
   final double temperature;
   final double tint;
   final double shadows;
   final double highlights;
+  /// Asums 0–100 (USM uz luminances).
+  final double sharpness;
   /// 0–3: katrs +1 = +90° (±90 pogas).
   final int rotationQuarterTurns;
   /// Brīvā pagriešana −45…+45° (slīdnis).
@@ -100,6 +120,24 @@ class ImageEditParams {
   final double cropTop;
   final double cropWidth;
   final double cropHeight;
+  /// Pan attēla koordinātēs (norm. vs crop log).
+  final double cropPanX;
+  final double cropPanY;
+  /// Papildu zoom ≥ 1 virs auto-fit straighten.
+  final double cropUserScale;
+
+  CropTransformMetadata get cropMetadata => CropTransformMetadata(
+        cropLeft: cropLeft,
+        cropTop: cropTop,
+        cropWidth: cropWidth,
+        cropHeight: cropHeight,
+        rotationQuarterTurns: rotationQuarterTurns,
+        rotationFineDegrees: rotationFineDegrees,
+        panXNorm: cropPanX,
+        panYNorm: cropPanY,
+        userScale: cropUserScale,
+        lockedAspect: cropAspect,
+      );
 
   factory ImageEditParams.fromPreset(EditPreset preset) {
     var total = preset.rotationDegrees % 360;
@@ -108,13 +146,16 @@ class ImageEditParams {
     var fine = (total - quarters * 90).toDouble();
     if (fine > 45) fine -= 90;
     return ImageEditParams(
-      brightness: preset.brightness,
-      contrast: preset.contrast,
+      exposure: ExposureAdjustment.fromLegacyBrightness(preset.exposure),
+      contrast: ContrastAdjustment.fromLegacyMultiplier(preset.contrast),
       saturation: preset.saturation,
-      temperature: preset.temperature,
-      tint: preset.tint,
+      temperature: WhiteBalanceAdjustment.kelvinFromLegacyTemperature(
+        preset.temperature,
+      ),
+      tint: WhiteBalanceAdjustment.tintFromLegacy(preset.tint),
       shadows: preset.shadows,
       highlights: preset.highlights,
+      sharpness: preset.sharpness,
       rotationQuarterTurns: quarters,
       rotationFineDegrees: fine,
       cropAspect: preset.cropAspect,
@@ -122,13 +163,14 @@ class ImageEditParams {
   }
 
   ImageEditParams copyWith({
-    double? brightness,
+    double? exposure,
     double? contrast,
     double? saturation,
     double? temperature,
     double? tint,
     double? shadows,
     double? highlights,
+    double? sharpness,
     int? rotationQuarterTurns,
     double? rotationFineDegrees,
     bool? constrainAfterRotate,
@@ -141,15 +183,19 @@ class ImageEditParams {
     double? cropTop,
     double? cropWidth,
     double? cropHeight,
+    double? cropPanX,
+    double? cropPanY,
+    double? cropUserScale,
   }) =>
       ImageEditParams(
-        brightness: brightness ?? this.brightness,
+        exposure: exposure ?? this.exposure,
         contrast: contrast ?? this.contrast,
         saturation: saturation ?? this.saturation,
         temperature: temperature ?? this.temperature,
         tint: tint ?? this.tint,
         shadows: shadows ?? this.shadows,
         highlights: highlights ?? this.highlights,
+        sharpness: sharpness ?? this.sharpness,
         rotationQuarterTurns:
             rotationQuarterTurns ?? this.rotationQuarterTurns,
         rotationFineDegrees:
@@ -164,18 +210,47 @@ class ImageEditParams {
         cropTop: cropTop ?? this.cropTop,
         cropWidth: cropWidth ?? this.cropWidth,
         cropHeight: cropHeight ?? this.cropHeight,
+        cropPanX: cropPanX ?? this.cropPanX,
+        cropPanY: cropPanY ?? this.cropPanY,
+        cropUserScale: cropUserScale ?? this.cropUserScale,
       );
+
+  /// Processing delta vs in-camera baseline (embedded JPEG already includes baseline).
+  ImageEditParams processingDelta(ImageEditParams baseline) {
+    return ImageEditParams(
+      exposure: exposure - baseline.exposure,
+      contrast: contrast - baseline.contrast,
+      temperature: temperature,
+      tint: tint,
+      shadows: shadows - baseline.shadows,
+      highlights: highlights - baseline.highlights,
+      sharpness: (sharpness - baseline.sharpness)
+          .clamp(SharpnessAdjustment.amountMin, SharpnessAdjustment.amountMax),
+      saturation: saturation,
+      rotationQuarterTurns: rotationQuarterTurns,
+      rotationFineDegrees: rotationFineDegrees,
+      constrainAfterRotate: constrainAfterRotate,
+      cropAspect: cropAspect,
+      cropLockAspect: cropLockAspect,
+      customAspect: customAspect,
+      cropLeft: cropLeft,
+      cropTop: cropTop,
+      cropWidth: cropWidth,
+      cropHeight: cropHeight,
+    );
+  }
 
   EditPreset toPreset(String name) => EditPreset(
         id: 'temp',
         name: name,
-        brightness: brightness,
+        exposure: exposure,
         contrast: contrast,
         saturation: saturation,
         temperature: temperature,
         tint: tint,
         shadows: shadows,
         highlights: highlights,
+        sharpness: sharpness,
         rotationDegrees: totalRotationDegrees.round() % 360,
         cropAspect: cropAspect,
       );
@@ -238,6 +313,8 @@ class ImageEditService {
     String? galleryFileName,
     String? thumbPath,
     String? galleryFolder,
+    /// Atverot rediģēšanu: atsvaidzina _emb.jpg un metadatu kešu.
+    bool freshForEdit = false,
   }) async {
     final baseline = baselineLocalPath(
       localPath,
@@ -245,10 +322,24 @@ class ImageEditService {
     );
 
     if (ImagePaths.isRaw(baseline)) {
+      final folder = galleryFolder ?? p.dirname(baseline);
+      if (freshForEdit) {
+        await RawEditSessionService.instance.invalidateSession(baseline);
+        await RawPreviewService.instance.invalidateCachesForRaw(
+          rawPath: baseline,
+          galleryFolder: folder,
+          deleteExtractedFiles: false,
+        );
+      }
+      await RawPreviewService.instance.ensureFullEmbeddedPreview(
+        rawPath: baseline,
+        galleryFolder: folder,
+        force: freshForEdit,
+      );
       final rawSource = await _resolveRawPreviewSource(
         rawPath: baseline,
-        thumbPath: thumbPath,
-        galleryFolder: galleryFolder,
+        thumbPath: null,
+        galleryFolder: folder,
       );
       if (rawSource != null) return rawSource;
     }
@@ -276,19 +367,31 @@ class ImageEditService {
     String? thumbPath,
     String? galleryFolder,
   }) async {
-    var preview = thumbPath;
+    String? preview;
     if (galleryFolder != null) {
-      final onDisk = RawPreviewService.instance.thumbPathFor(
-        galleryFolder,
-        rawPath,
+      preview = await RawPreviewService.instance.ensureFullEmbeddedPreview(
+        rawPath: rawPath,
+        galleryFolder: galleryFolder,
       );
-      if (RawPreviewService.isUsableThumb(onDisk)) {
-        preview = onDisk;
-      } else if (preview == null || !RawPreviewService.isUsableThumb(preview)) {
+      if (preview == null) {
         preview = await RawPreviewService.instance.extractEmbeddedJpeg(
           rawPath: rawPath,
           galleryFolder: galleryFolder,
         );
+      }
+    } else {
+      preview = thumbPath;
+    }
+
+    if (preview != null && await File(preview).exists()) {
+      if (!await RawPreviewService.isFullEmbeddedPreview(preview)) {
+        if (galleryFolder != null) {
+          preview = await RawPreviewService.instance.ensureFullEmbeddedPreview(
+            rawPath: rawPath,
+            galleryFolder: galleryFolder,
+            force: true,
+          );
+        }
       }
     }
 
@@ -305,6 +408,7 @@ class ImageEditService {
     required EditSource source,
     required String galleryFileName,
     String? galleryFolder,
+    RawCameraBaseline? cameraBaseline,
   }) async {
     final rawPath = source.rawSourcePath;
     final originalName = rawPath != null
@@ -330,11 +434,41 @@ class ImageEditService {
 
     final workDims = await _decodeDimensionsFromFile(source.path);
     String? rawDimsLabel;
-    if (rawPath != null) {
+    if (cameraBaseline != null &&
+        cameraBaseline.rawWidth > 0 &&
+        cameraBaseline.rawHeight > 0) {
+      rawDimsLabel =
+          '${cameraBaseline.rawWidth}×${cameraBaseline.rawHeight} (EXIF no RAW)';
+    } else if (rawPath != null) {
       final rawDims = await _readRawExifDimensions(rawPath);
       rawDimsLabel = rawDims == null
           ? null
           : '${rawDims.$1}×${rawDims.$2} (EXIF no RAW)';
+    }
+
+    List<String> rawDetailExtras() {
+      if (cameraBaseline == null || cameraBaseline.usedFallback) {
+        return const [];
+      }
+      final b = cameraBaseline;
+      final lines = <String>[
+        'Lightroom Camera Settings (Nikon metadati).',
+        if (b.cameraModel != null) 'Kamera: ${b.cameraModel}',
+        if (b.pictureControl != null) 'Profils: ${b.pictureControl}',
+        if (b.activeDLighting != null) 'Active D-Lighting: ${b.activeDLighting}',
+        if (b.exposureCompensationEv != 0)
+          'Kompensācija (roka): ${b.exposureCompensationEv >= 0 ? '+' : ''}${b.exposureCompensationEv.toStringAsFixed(2)} EV',
+        if (b.exposureEv != 0)
+          'Develop ekspozīcija: ${b.exposureEv >= 0 ? '+' : ''}${b.exposureEv.toStringAsFixed(2)} EV',
+        if (b.highIsoNoiseReduction != null)
+          'High ISO NR: ${b.highIsoNoiseReduction}',
+        if (b.highlights != 0) 'Spilgtumi: ${b.highlights.round()}',
+        if (b.shadows != 0) 'Ēnas: ${b.shadows.round()}',
+        'Balans: ${b.kelvin.round()} K, tint ${b.tint.round()}',
+        if (b.sources.isNotEmpty)
+          'Avots: ${b.sources.take(4).join(', ')}',
+      ];
+      return lines;
     }
 
     final outputHint = rawPath != null
@@ -374,7 +508,8 @@ class ImageEditService {
           headline: 'RAW fails — apstrāde uz iegultā priekšskata',
           detailLines: [
             'Pilns RAW sensors netiek attīstīts — lietots kameras iegults JPG.',
-            'Orientācija un reitings tiek lasīti no $originalFormat.',
+            'Slīdņi sākas ar kameras vērtībām; izmaiņas = delta pret As Shot.',
+            ...rawDetailExtras(),
             'Saglabājums: jauns JPG blakus RAW (RAW paliek nemainīts).',
           ],
           originalFileSizeLabel: _formatBytes(rawBytes),
@@ -494,24 +629,260 @@ class ImageEditService {
     );
   }
 
-  Future<ImagePreviewResult?> renderPreview({
+  /// In-camera metadata → slider defaults (NEF/RAW + EXIF/MakerNote).
+  /// Android: native [RawEditSessionService] first; Dart parser as fallback.
+  Future<({ImageEditParams params, ImageEditParams baseline, RawCameraBaseline? meta})>
+      initialParamsFromSource(EditSource source) async {
+    final rawPath = source.rawSourcePath;
+    RawCameraBaseline? meta;
+
+    if (rawPath != null && await File(rawPath).exists()) {
+      await RawEditSessionService.instance.invalidateSession(rawPath);
+      RawPreviewQueue.instance.invalidate(rawPath);
+    }
+
+    if (rawPath != null &&
+        await File(rawPath).exists() &&
+        await RawEditSessionService.instance.isAvailable()) {
+      meta = await RawEditSessionService.instance.initializeSession(
+        rawPath: rawPath,
+        previewPath: source.path,
+      );
+    }
+
+    final settings = rawPath != null && await File(rawPath).exists()
+        ? await RawCameraSettingsParser.parsePath(
+            rawPath,
+            fallbackPreviewPath: source.path,
+          )
+        : await RawCameraSettingsParser.parsePath(source.path);
+
+    // Dart TIFF/EXIF parser (fixed SubIFD) drives sliders; native enriches cache only.
+    if (!settings.usedFallback) {
+      final params = _paramsFromCameraSettings(settings);
+      final dartMeta = _baselineFromDartSettings(settings);
+      final mergedMeta = _mergeCameraMeta(meta, dartMeta);
+      return (params: params, baseline: params, meta: mergedMeta);
+    }
+
+    if (meta != null && !meta.usedFallback) {
+      final params = RawEditSessionService.instance.paramsFromBaseline(meta);
+      return (params: params, baseline: params, meta: meta);
+    }
+
+    final params = _paramsFromCameraSettings(settings);
+    return (params: params, baseline: params, meta: _baselineFromDartSettings(settings));
+  }
+
+  RawCameraBaseline _mergeCameraMeta(
+    RawCameraBaseline? native,
+    RawCameraBaseline dart,
+  ) {
+    if (native == null || native.usedFallback) return dart;
+    final sources = <String>{...native.sources, ...dart.sources}.toList();
+    return RawCameraBaseline(
+      exposureEv: dart.exposureEv,
+      exposureCompensationEv: dart.exposureCompensationEv,
+      kelvin: dart.kelvin != WhiteBalanceAdjustment.neutralKelvin ||
+              dart.sources.any((s) => s.contains('Color') || s.contains('nikon'))
+          ? dart.kelvin
+          : native.kelvin,
+      tint: dart.sources.any((s) => s.contains('tint') || s.contains('FineTune'))
+          ? dart.tint
+          : native.tint,
+      contrast: dart.contrast != 0 ? dart.contrast : native.contrast,
+      shadows: dart.shadows != 0 ? dart.shadows : native.shadows,
+      highlights: dart.highlights != 0 ? dart.highlights : native.highlights,
+      sharpness: dart.sharpness != 0 ? dart.sharpness : native.sharpness,
+      activeDLighting: dart.activeDLighting ?? native.activeDLighting,
+      highIsoNoiseReduction:
+          dart.highIsoNoiseReduction ?? native.highIsoNoiseReduction,
+      saturation: dart.saturation,
+      redGain: native.redGain,
+      greenGain: native.greenGain,
+      blueGain: native.blueGain,
+      colorSpace: native.colorSpace,
+      pictureControl: dart.pictureControl ?? native.pictureControl,
+      cameraModel: dart.cameraModel ?? native.cameraModel,
+      rawWidth: native.rawWidth > 0 ? native.rawWidth : dart.rawWidth,
+      rawHeight: native.rawHeight > 0 ? native.rawHeight : dart.rawHeight,
+      sources: sources,
+      usedFallback: false,
+    );
+  }
+
+  RawCameraBaseline _baselineFromDartSettings(RawCameraSettings s) =>
+      RawCameraBaseline(
+        exposureEv: s.exposureEv,
+        exposureCompensationEv: s.exposureCompensationEv,
+        kelvin: s.kelvin,
+        tint: s.tint,
+        contrast: s.contrast,
+        shadows: s.shadows,
+        highlights: s.highlights,
+        sharpness: s.sharpness,
+        saturation: 1,
+        pictureControl: s.pictureControlName ?? s.cameraMatchingProfile,
+        cameraModel: s.cameraModel,
+        activeDLighting: s.activeDLighting,
+        highIsoNoiseReduction: s.highIsoNoiseReduction,
+        sources: s.sources,
+        usedFallback: s.usedFallback,
+      );
+
+  ImageEditParams _paramsFromCameraSettings(RawCameraSettings s) =>
+      ImageEditParams(
+        exposure: s.exposureEv,
+        temperature: s.kelvin,
+        tint: s.tint,
+        contrast: s.contrast,
+        shadows: s.shadows,
+        highlights: s.highlights,
+        sharpness: s.sharpness,
+      );
+
+  /// Vienots develop ceļš (Lightroom): decode → [ģeometrija] → process(delta).
+  /// Priekšskats un eksports izmanto šo pašu funkciju — WYSIWYG.
+  Future<img.Image?> developImage({
     required EditSource source,
     required ImageEditParams params,
-    EditPreviewMode mode = EditPreviewMode.full,
+    ImageEditParams? cameraBaseline,
+    bool includeGeometry = true,
+    bool includeColorProcess = true,
+    int? maxLongEdge,
   }) async {
     var image = await _decodeOriented(source);
     if (image == null) return null;
-
-    image = _resizeLongEdge(image, previewMaxLongEdge);
-    switch (mode) {
-      case EditPreviewMode.geometryOnly:
-        image = applyGeometry(image, params);
-      case EditPreviewMode.colorOnly:
-        image = process(image, params);
-      case EditPreviewMode.full:
-        image = applyGeometry(image, params);
-        image = process(image, params);
+    if (maxLongEdge != null) {
+      image = _resizeLongEdge(image, maxLongEdge);
     }
+    if (includeGeometry) {
+      image = applyGeometry(image, params);
+    }
+    if (includeColorProcess) {
+      image = process(image, params, cameraBaseline: cameraBaseline);
+    }
+    return image;
+  }
+
+  /// Lightroom `.xmp` → nelielas korekcijas (slīdņi no 0) → priekšskats.
+  Future<ImagePreviewResult?> renderPreviewWithXmp({
+    required EditSource source,
+    required String xmpPath,
+    required ImageEditParams fineTune,
+    EditPreviewMode mode = EditPreviewMode.full,
+  }) async {
+    final xmpBytes = await LightroomXmpService.instance.renderPreviewJpeg(
+      xmpPath: xmpPath,
+      sourcePath: source.path,
+      maxLongEdge: previewMaxLongEdge,
+    );
+    if (xmpBytes == null) return null;
+    var image = img.decodeJpg(xmpBytes);
+    if (image == null) return null;
+
+    if (mode != EditPreviewMode.colorOnly) {
+      image = applyGeometry(image, fineTune);
+    }
+    if (mode != EditPreviewMode.geometryOnly) {
+      image = process(image, fineTune);
+    }
+    return ImagePreviewResult(
+      bytes: Uint8List.fromList(img.encodeJpg(image, quality: 88)),
+      width: image.width,
+      height: image.height,
+    );
+  }
+
+  /// Pilna izšķirtspēja: XMP uz temp JPG → fine-tune + ģeometrija → [destPath].
+  Future<bool> applyAndSaveWithXmp({
+    required EditSource source,
+    required String xmpPath,
+    required String destPath,
+    required ImageEditParams fineTune,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempPath = p.join(
+      tempDir.path,
+      'xmp_base_${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
+    final xmpOk = await LightroomXmpService.instance.applyToFile(
+      xmpPath: xmpPath,
+      sourcePath: source.path,
+      destPath: tempPath,
+    );
+    if (!xmpOk) {
+      try {
+        await File(tempPath).delete();
+      } catch (_) {}
+      return false;
+    }
+
+    final xmpSource = EditSource.directJpeg(tempPath);
+    final image = await developImage(
+      source: xmpSource,
+      params: fineTune,
+      includeGeometry: true,
+      includeColorProcess: true,
+    );
+    try {
+      await File(tempPath).delete();
+    } catch (_) {}
+
+    if (image == null) return false;
+    final outDir = Directory(p.dirname(destPath));
+    if (!await outDir.exists()) await outDir.create(recursive: true);
+    final ext = p.extension(destPath).toLowerCase();
+    final encoded = ext == '.png'
+        ? img.encodePng(image)
+        : img.encodeJpg(image, quality: 92);
+    await File(destPath).writeAsBytes(encoded);
+    return true;
+  }
+
+  /// Pagriezts bāzes kadrs pēc XMP (tikai ±90°; straighten Kadru režīmā).
+  Future<ImagePreviewResult?> renderRotatedBaseWithXmp({
+    required EditSource source,
+    required String xmpPath,
+    required ImageEditParams params,
+  }) async {
+    final xmpBytes = await LightroomXmpService.instance.renderPreviewJpeg(
+      xmpPath: xmpPath,
+      sourcePath: source.path,
+      maxLongEdge: previewMaxLongEdge,
+    );
+    if (xmpBytes == null) return null;
+    var image = img.decodeJpg(xmpBytes);
+    if (image == null) return null;
+
+    final rotOnly = ImageEditParams(
+      rotationQuarterTurns: params.rotationQuarterTurns,
+      rotationFineDegrees: 0,
+      constrainAfterRotate: params.constrainAfterRotate,
+    );
+    image = applyGeometry(image, rotOnly);
+    return ImagePreviewResult(
+      bytes: Uint8List.fromList(img.encodeJpg(image, quality: 90)),
+      width: image.width,
+      height: image.height,
+    );
+  }
+
+  Future<ImagePreviewResult?> renderPreview({
+    required EditSource source,
+    required ImageEditParams params,
+    ImageEditParams? cameraBaseline,
+    EditPreviewMode mode = EditPreviewMode.full,
+  }) async {
+    final image = await developImage(
+      source: source,
+      params: params,
+      cameraBaseline: cameraBaseline,
+      includeGeometry: mode != EditPreviewMode.colorOnly,
+      includeColorProcess: mode != EditPreviewMode.geometryOnly,
+      maxLongEdge: previewMaxLongEdge,
+    );
+    if (image == null) return null;
     return ImagePreviewResult(
       bytes: Uint8List.fromList(img.encodeJpg(image, quality: 88)),
       width: image.width,
@@ -530,7 +901,7 @@ class ImageEditService {
     image = _resizeLongEdge(image, previewMaxLongEdge);
     final rotOnly = ImageEditParams(
       rotationQuarterTurns: params.rotationQuarterTurns,
-      rotationFineDegrees: params.rotationFineDegrees,
+      rotationFineDegrees: 0,
       constrainAfterRotate: params.constrainAfterRotate,
     );
     image = applyGeometry(image, rotOnly);
@@ -583,12 +954,16 @@ class ImageEditService {
     required EditSource source,
     required String destPath,
     required ImageEditParams params,
+    ImageEditParams? cameraBaseline,
   }) async {
-    var image = await _decodeOriented(source);
+    final image = await developImage(
+      source: source,
+      params: params,
+      cameraBaseline: cameraBaseline,
+      includeGeometry: true,
+      includeColorProcess: true,
+    );
     if (image == null) return false;
-
-    image = applyGeometry(image, params);
-    image = process(image, params);
 
     final outDir = Directory(p.dirname(destPath));
     if (!await outDir.exists()) await outDir.create(recursive: true);
@@ -600,77 +975,63 @@ class ImageEditService {
     return true;
   }
 
-  /// Apstrādes kārtība: baltā balansa → ēnas → gaišums/kontrasts.
-  img.Image process(img.Image image, ImageEditParams p) {
+  /// Apstrādes kārtība: ekspozīcija → WB → ēnas → spilgtumi → kontrasts → saturācija → asums.
+  ///
+  /// [cameraBaseline]: in-camera values at load; only the **delta** vs baseline is applied
+  /// so embedded JPEG previews stay unchanged when sliders match the camera.
+  img.Image process(
+    img.Image image,
+    ImageEditParams p, {
+    ImageEditParams? cameraBaseline,
+  }) {
+    final effective = cameraBaseline != null
+        ? p.processingDelta(cameraBaseline)
+        : p;
     var out = image;
-    if (p.temperature != 0 || p.tint != 0) {
-      out = _applyWhiteBalance(out, p.temperature, p.tint);
+    if (!ExposureAdjustment.isNeutral(effective.exposure)) {
+      out = ExposureAdjustment.apply(out, effective.exposure);
     }
-    if (p.shadows != 0) {
-      out = _applyShadows(out, p.shadows);
+    if (cameraBaseline != null) {
+      if (!WhiteBalanceAdjustment.isAtBaseline(
+        p.temperature,
+        p.tint,
+        cameraBaseline.temperature,
+        cameraBaseline.tint,
+      )) {
+        out = WhiteBalanceAdjustment.applyRelative(
+          out,
+          baselineKelvin: cameraBaseline.temperature,
+          baselineTint: cameraBaseline.tint,
+          targetKelvin: p.temperature,
+          targetTint: p.tint,
+        );
+      }
+    } else if (!WhiteBalanceAdjustment.isNeutral(
+      effective.temperature,
+      effective.tint,
+    )) {
+      out = WhiteBalanceAdjustment.apply(
+        out,
+        kelvin: effective.temperature,
+        tint: effective.tint,
+      );
     }
-    if (p.highlights != 0) {
-      out = _applyHighlights(out, p.highlights);
+    if (effective.shadows != 0) {
+      out = ShadowsAdjustment.apply(out, effective.shadows);
     }
-    if (p.brightness != 0 || p.contrast != 1) {
-      out = _applyBrightnessContrast(out, p.brightness, p.contrast);
+    if (effective.highlights != 0) {
+      out = HighlightsAdjustment.apply(out, effective.highlights);
     }
-    if (p.saturation != 1) {
-      out = img.adjustColor(out, saturation: p.saturation);
+    if (!ContrastAdjustment.isNeutral(effective.contrast)) {
+      out = ContrastAdjustment.apply(out, effective.contrast);
+    }
+    if (effective.saturation != 1) {
+      out = img.adjustColor(out, saturation: effective.saturation);
+    }
+    if (!SharpnessAdjustment.isNeutral(effective.sharpness)) {
+      out = SharpnessAdjustment.apply(out, amount: effective.sharpness);
     }
     return out;
-  }
-
-  img.Image _applyBrightnessContrast(
-    img.Image src,
-    double brightness,
-    double contrast,
-  ) {
-    final out = img.Image.from(src);
-    final bOff = brightness.clamp(-1.0, 1.0) * 48;
-    final c = contrast.clamp(0.25, 2.5);
-
-    for (var y = 0; y < src.height; y++) {
-      for (var x = 0; x < src.width; x++) {
-        final px = src.getPixel(x, y);
-        final r = ((px.r - 128) * c + 128 + bOff).round().clamp(0, 255);
-        final g = ((px.g - 128) * c + 128 + bOff).round().clamp(0, 255);
-        final b = ((px.b - 128) * c + 128 + bOff).round().clamp(0, 255);
-        out.setPixelRgba(x, y, r, g, b, px.a.round().clamp(0, 255));
-      }
-    }
-    return out;
-  }
-
-  /// Gray-world aptuvenais auto balans (temp/tint slīdņiem).
-  ({double temperature, double tint}) estimateAutoWhiteBalance(img.Image image) {
-    var sumR = 0.0;
-    var sumG = 0.0;
-    var sumB = 0.0;
-    var n = 0;
-    final stepX = math.max(1, image.width ~/ 48);
-    final stepY = math.max(1, image.height ~/ 48);
-    for (var y = 0; y < image.height; y += stepY) {
-      for (var x = 0; x < image.width; x += stepX) {
-        final c = image.getPixel(x, y);
-        sumR += c.r;
-        sumG += c.g;
-        sumB += c.b;
-        n++;
-      }
-    }
-    if (n == 0) return (temperature: 0, tint: 0);
-    final avgR = sumR / n;
-    final avgG = sumG / n;
-    final avgB = sumB / n;
-    final gray = (avgR + avgG + avgB) / 3;
-    if (gray < 1) return (temperature: 0, tint: 0);
-    final rGain = gray / avgR;
-    final bGain = gray / avgB;
-    final gGain = gray / avgG;
-    final temp = ((rGain - bGain) / (rGain + bGain)).clamp(-1.0, 1.0) * 0.85;
-    final tint = ((gGain - 1) * 1.4).clamp(-1.0, 1.0);
-    return (temperature: temp, tint: tint);
   }
 
   Future<({double temperature, double tint})?> autoWhiteBalanceForSource(
@@ -678,94 +1039,8 @@ class ImageEditService {
   ) async {
     final image = await _decodeOriented(source);
     if (image == null) return null;
-    return estimateAutoWhiteBalance(image);
-  }
-
-  img.Image _applyWhiteBalance(img.Image src, double temperature, double tint) {
-    final out = img.Image.from(src);
-    final t = temperature.clamp(-1.0, 1.0);
-    final tn = tint.clamp(-1.0, 1.0);
-    final warmR = 1 + t * 0.45;
-    final warmB = 1 - t * 0.45;
-    final tintG = 1 - tn * 0.35;
-    final tintMag = 1 + tn * 0.22;
-
-    for (var y = 0; y < src.height; y++) {
-      for (var x = 0; x < src.width; x++) {
-        final c = src.getPixel(x, y);
-        var r = c.r * warmR * tintMag;
-        var g = c.g * tintG * tintMag;
-        var b = c.b * warmB * tintMag;
-        out.setPixelRgba(
-          x,
-          y,
-          r.round().clamp(0, 255),
-          g.round().clamp(0, 255),
-          b.round().clamp(0, 255),
-          c.a.round().clamp(0, 255),
-        );
-      }
-    }
-    return out;
-  }
-
-  img.Image _applyShadows(img.Image src, double shadows) {
-    final out = img.Image.from(src);
-    final amount = shadows.clamp(-1.0, 1.0);
-    if (amount == 0) return out;
-
-    final maxLift = amount * 72;
-
-    for (var y = 0; y < src.height; y++) {
-      for (var x = 0; x < src.width; x++) {
-        final c = src.getPixel(x, y);
-        final r = c.r.toDouble();
-        final g = c.g.toDouble();
-        final b = c.b.toDouble();
-        final luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        final weight = math.pow(1 - luma, 1.8).toDouble();
-        final lift = maxLift * weight;
-        out.setPixelRgba(
-          x,
-          y,
-          (r + lift).round().clamp(0, 255),
-          (g + lift).round().clamp(0, 255),
-          (b + lift).round().clamp(0, 255),
-          c.a.round().clamp(0, 255),
-        );
-      }
-    }
-    return out;
-  }
-
-  /// Spilgtās zonas: + vērtība atgūst izgaismojumus (tumšina), − pastiprina.
-  img.Image _applyHighlights(img.Image src, double highlights) {
-    final out = img.Image.from(src);
-    final amount = highlights.clamp(-1.0, 1.0);
-    if (amount == 0) return out;
-
-    final maxChange = amount * 72;
-
-    for (var y = 0; y < src.height; y++) {
-      for (var x = 0; x < src.width; x++) {
-        final c = src.getPixel(x, y);
-        final r = c.r.toDouble();
-        final g = c.g.toDouble();
-        final b = c.b.toDouble();
-        final luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        final weight = math.pow(luma, 1.8).toDouble();
-        final delta = -maxChange * weight;
-        out.setPixelRgba(
-          x,
-          y,
-          (r + delta).round().clamp(0, 255),
-          (g + delta).round().clamp(0, 255),
-          (b + delta).round().clamp(0, 255),
-          c.a.round().clamp(0, 255),
-        );
-      }
-    }
-    return out;
+    final est = WhiteBalanceAdjustment.estimateFromImage(image);
+    return (temperature: est.kelvin, tint: est.tint);
   }
 
   img.Image _resizeLongEdge(img.Image image, int maxEdge) {
@@ -812,12 +1087,18 @@ class ImageEditService {
     return p.join(dir, '${base}_edited.jpg');
   }
 
-  static const socialAspects = <String, double>{
-    'Instagram 1:1': 1,
-    'Instagram 4:5': 4 / 5,
+  /// Malu attiecības (platums / augstums). `null` = brīvais / pilns.
+  static const cropAspectPresets = <String, double>{
+    '1:1': 1,
+    '4:5': 4 / 5,
+    '8.5:11': 8.5 / 11,
+    '2:3': 2 / 3,
+    '16:9': 16 / 9,
     'Stories 9:16': 9 / 16,
-    'Facebook 16:9': 16 / 9,
   };
+
+  @Deprecated('Use cropAspectPresets')
+  static const socialAspects = cropAspectPresets;
 
   img.Image _rotate(img.Image src, double angle, bool constrain) {
     if (angle.abs() < 0.01) return src;
@@ -825,12 +1106,13 @@ class ImageEditService {
       return img.copyRotate(src, angle: angle);
     }
 
-    final rad = angle * math.pi / 180;
-    final cosA = math.cos(rad).abs();
-    final sinA = math.sin(rad).abs();
-    final boundW = src.width * cosA + src.height * sinA;
-    final boundH = src.width * sinA + src.height * cosA;
-    final scale = math.max(boundW / src.width, boundH / src.height);
+    final scale = CropStraightenMath.minCoverScale(
+      imageWidth: src.width.toDouble(),
+      imageHeight: src.height.toDouble(),
+      cropWidth: src.width.toDouble(),
+      cropHeight: src.height.toDouble(),
+      thetaDegrees: angle,
+    );
     final sw = (src.width * scale).round().clamp(1, 20000);
     final sh = (src.height * scale).round().clamp(1, 20000);
     var scaled = img.copyResize(src, width: sw, height: sh);

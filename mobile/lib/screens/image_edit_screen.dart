@@ -7,17 +7,30 @@ import 'package:path/path.dart' as p;
 import '../models/edit_preset.dart';
 import '../models/edit_source_info.dart';
 import '../models/gallery_image.dart';
+import '../models/lightroom_xmp_preset.dart';
+import '../models/raw_camera_baseline.dart';
 import '../services/edit_preset_repository.dart';
+import '../services/contrast_adjustment.dart';
+import '../services/exposure_adjustment.dart';
+import '../services/shadows_adjustment.dart';
+import '../services/highlights_adjustment.dart';
+import '../services/sharpness_adjustment.dart';
 import '../services/image_edit_service.dart';
+import '../services/lightroom_xmp_preset_repository.dart';
+import '../services/lightroom_xmp_service.dart';
+import '../services/raw_edit_session_service.dart';
+import '../utils/crop_straighten_math.dart';
+import '../services/white_balance_adjustment.dart';
 import '../widgets/edit_source_banner.dart';
 import '../widgets/image_edit_crop_canvas.dart';
 
 enum _EditTool {
   whiteBalance,
-  brightness,
+  exposure,
   contrast,
   highlights,
   shadows,
+  sharpness,
   /// Izmērs + pagrieziens vienā (Lightroom-style Kadrs).
   transform,
 }
@@ -42,6 +55,9 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   late int _index;
   late ImageEditParams _params;
   ImageEditParams _baselineParams = const ImageEditParams();
+  /// Kameras As Shot — saglabāts, lai atjaunotu pēc XMP noņemšanas.
+  ImageEditParams? _cameraBaselineParams;
+  RawCameraBaseline? _cameraMeta;
   EditSource? _editSource;
   EditSourceInfo? _editSourceInfo;
   int? _orientedWidth;
@@ -53,12 +69,15 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   bool _loading = true;
   bool _previewBusy = false;
   List<EditPreset> _presets = [];
+  List<LightroomXmpPreset> _xmpPresets = [];
+  LightroomXmpPreset? _activeXmpPreset;
   Uint8List? _previewBytes;
   int? _previewWidth;
   int? _previewHeight;
   Timer? _previewDebounce;
   int _previewGen = 0;
   _EditTool? _activeTool;
+  bool _straightenActive = false;
 
   @override
   void initState() {
@@ -78,6 +97,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     _presets = await EditPresetRepository.instance.loadAll();
+    _xmpPresets = await LightroomXmpPresetRepository.instance.loadAll();
     await _loadSource();
     if (mounted) {
       setState(() => _loading = false);
@@ -92,15 +112,9 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       galleryFileName: img.fileName,
       thumbPath: img.thumbPath,
       galleryFolder: widget.galleryFolder,
+      freshForEdit: true,
     );
     final src = _editSource;
-    _editSourceInfo = src == null
-        ? null
-        : await ImageEditService.instance.describeEditSource(
-            source: src,
-            galleryFileName: img.fileName,
-            galleryFolder: widget.galleryFolder,
-          );
     _previewBytes = null;
     _transformBaseBytes = null;
     _transformBaseWidth = null;
@@ -108,20 +122,53 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     _orientedWidth = null;
     _orientedHeight = null;
     if (src != null) {
+      final initial =
+          await ImageEditService.instance.initialParamsFromSource(src);
+      _params = initial.params;
+      _baselineParams = initial.baseline;
+      _cameraBaselineParams = initial.baseline;
+      _cameraMeta = initial.meta;
+      _editSourceInfo = await ImageEditService.instance.describeEditSource(
+        source: src,
+        galleryFileName: img.fileName,
+        galleryFolder: widget.galleryFolder,
+        cameraBaseline: _cameraMeta,
+      );
       final base = await ImageEditService.instance.loadOrientedBase(src);
       if (base != null) {
         _orientedWidth = base.width;
         _orientedHeight = base.height;
       }
+
+      final defaultId =
+          await LightroomXmpPresetRepository.instance.defaultPresetId();
+      if (defaultId != null &&
+          await LightroomXmpService.instance.isAvailable()) {
+        LightroomXmpPreset? preset;
+        for (final p in _xmpPresets) {
+          if (p.id == defaultId) {
+            preset = p;
+            break;
+          }
+        }
+        if (preset != null) {
+          _activeXmpPreset = preset;
+          _params = const ImageEditParams();
+          _baselineParams = const ImageEditParams();
+        }
+      }
+    } else {
+      _params = const ImageEditParams();
+      _baselineParams = const ImageEditParams();
+      _cameraBaselineParams = null;
+      _cameraMeta = null;
+      _editSourceInfo = null;
     }
   }
 
-  bool _isColorTool(_EditTool? tool) =>
-      tool != null && tool != _EditTool.transform;
-
+  /// Lightroom-style: pilns develop (crop + krāsa), izņemot Kadru režīmu.
   EditPreviewMode _previewModeForTool(_EditTool? tool) {
     if (tool == _EditTool.transform) return EditPreviewMode.geometryOnly;
-    if (_isColorTool(tool)) return EditPreviewMode.colorOnly;
     return EditPreviewMode.full;
   }
 
@@ -144,11 +191,22 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     final gen = ++_previewGen;
     if (mounted) setState(() => _previewBusy = true);
 
-    final result = await ImageEditService.instance.renderPreview(
-      source: src,
-      params: _params,
-      mode: _previewModeForTool(_activeTool),
-    );
+    final xmp = _activeXmpPreset;
+    final useXmp = xmp != null &&
+        await LightroomXmpService.instance.isAvailable();
+    final result = useXmp
+        ? await ImageEditService.instance.renderPreviewWithXmp(
+            source: src,
+            xmpPath: xmp.xmpPath,
+            fineTune: _params,
+            mode: _previewModeForTool(_activeTool),
+          )
+        : await ImageEditService.instance.renderPreview(
+            source: src,
+            params: _params,
+            cameraBaseline: _baselineParams,
+            mode: _previewModeForTool(_activeTool),
+          );
 
     if (!mounted || gen != _previewGen) return;
     setState(() {
@@ -182,10 +240,19 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     final gen = ++_transformGen;
     if (mounted) setState(() => _transformBaseBusy = true);
 
-    final result = await ImageEditService.instance.renderRotatedBase(
-      source: src,
-      params: _params,
-    );
+    final xmp = _activeXmpPreset;
+    final useXmp = xmp != null &&
+        await LightroomXmpService.instance.isAvailable();
+    final result = useXmp
+        ? await ImageEditService.instance.renderRotatedBaseWithXmp(
+            source: src,
+            xmpPath: xmp.xmpPath,
+            params: _params,
+          )
+        : await ImageEditService.instance.renderRotatedBase(
+            source: src,
+            params: _params,
+          );
 
     if (!mounted || gen != _transformGen) return;
     setState(() {
@@ -208,15 +275,34 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     final prevConstrain = _params.constrainAfterRotate;
     var applied = next;
     if (resetCropOnQuarterTurn && next.rotationQuarterTurns != prevQ) {
+      var aspect = next.cropAspect;
+      if (aspect != null) {
+        aspect = CropStraightenMath.swapAspectForQuarterTurn(aspect);
+      }
       applied = next.copyWith(
         cropLeft: 0,
         cropTop: 0,
         cropWidth: 1,
         cropHeight: 1,
-        clearCropAspect: true,
+        cropPanX: 0,
+        cropPanY: 0,
+        cropUserScale: 1,
+        cropAspect: aspect,
       );
     }
+    final tempChanged = applied.temperature != _params.temperature;
+    final tintChanged = applied.tint != _params.tint;
     setState(() => _params = applied);
+    final rawPath = _editSource?.rawSourcePath;
+    if (rawPath != null && (tempChanged || tintChanged)) {
+      unawaited(
+        RawEditSessionService.instance.setWhiteBalanceFromSliders(
+          rawPath: rawPath,
+          kelvin: applied.temperature,
+          tint: applied.tint,
+        ),
+      );
+    }
     if (!refreshPreview) return;
 
     if (_activeTool == _EditTool.transform) {
@@ -247,15 +333,22 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   void _resetTool(_EditTool tool) {
     switch (tool) {
       case _EditTool.whiteBalance:
-        _updateParams(_params.copyWith(temperature: 0, tint: 0));
-      case _EditTool.brightness:
-        _updateParams(_params.copyWith(brightness: 0));
+        _updateParams(
+          _params.copyWith(
+            temperature: _baselineParams.temperature,
+            tint: _baselineParams.tint,
+          ),
+        );
+      case _EditTool.exposure:
+        _updateParams(_params.copyWith(exposure: _baselineParams.exposure));
       case _EditTool.contrast:
-        _updateParams(_params.copyWith(contrast: 1));
+        _updateParams(_params.copyWith(contrast: _baselineParams.contrast));
       case _EditTool.highlights:
-        _updateParams(_params.copyWith(highlights: 0));
+        _updateParams(_params.copyWith(highlights: _baselineParams.highlights));
       case _EditTool.shadows:
-        _updateParams(_params.copyWith(shadows: 0));
+        _updateParams(_params.copyWith(shadows: _baselineParams.shadows));
+      case _EditTool.sharpness:
+        _updateParams(_params.copyWith(sharpness: _baselineParams.sharpness));
       case _EditTool.transform:
         _updateParams(
           _params.copyWith(
@@ -281,7 +374,11 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   }
 
   void _restoreOriginal() {
-    _updateParams(_baselineParams);
+    if (_activeXmpPreset != null) {
+      _updateParams(const ImageEditParams());
+    } else {
+      _updateParams(_baselineParams);
+    }
     setState(() => _activeTool = null);
   }
 
@@ -375,7 +472,13 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
               onTap: () => Navigator.pop(ctx, 'full'),
             ),
             const Divider(height: 1),
-            ...ImageEditService.socialAspects.entries.map(
+            ListTile(
+              leading: const Icon(Icons.photo_outlined),
+              title: const Text('Oriģināls'),
+              subtitle: const Text('Attēla sākotnējā proporcija'),
+              onTap: () => Navigator.pop(ctx, 'original'),
+            ),
+            ...ImageEditService.cropAspectPresets.entries.map(
               (e) => ListTile(
                 title: Text(e.key),
                 trailing: _params.cropAspect == e.value
@@ -418,11 +521,24 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
 
     final baseline = ImageEditService.instance.baselineLocalPath(local);
     final dest = ImageEditService.instance.editedOutputPath(baseline);
-    final ok = await ImageEditService.instance.applyAndSave(
-      source: src,
-      destPath: dest,
-      params: _params,
-    );
+
+    bool ok = false;
+    if (_activeXmpPreset != null &&
+        await LightroomXmpService.instance.isAvailable()) {
+      ok = await ImageEditService.instance.applyAndSaveWithXmp(
+        source: src,
+        xmpPath: _activeXmpPreset!.xmpPath,
+        destPath: dest,
+        fineTune: _params,
+      );
+    } else {
+      ok = await ImageEditService.instance.applyAndSave(
+        source: src,
+        destPath: dest,
+        params: _params,
+        cameraBaseline: _baselineParams,
+      );
+    }
     if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -469,7 +585,37 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   }
 
   void _applyPreset(EditPreset preset) {
+    setState(() => _activeXmpPreset = null);
     _updateParams(ImageEditParams.fromPreset(preset));
+  }
+
+  Future<void> _applyXmpPreset(LightroomXmpPreset preset) async {
+    if (!await LightroomXmpService.instance.isAvailable()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('XMP apstrāde pieejama tikai Android')),
+      );
+      return;
+    }
+    final deselect = _activeXmpPreset?.id == preset.id;
+    setState(() {
+      _activeXmpPreset = deselect ? null : preset;
+      _activeTool = null;
+      if (deselect) {
+        final cam = _cameraBaselineParams;
+        if (cam != null && _cameraMeta != null && !_cameraMeta!.usedFallback) {
+          _params = cam;
+          _baselineParams = cam;
+        } else {
+          _params = const ImageEditParams();
+          _baselineParams = const ImageEditParams();
+        }
+      } else {
+        _params = const ImageEditParams();
+        _baselineParams = const ImageEditParams();
+      }
+    });
+    _schedulePreview(immediate: true);
   }
 
   @override
@@ -537,7 +683,11 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         cropHeight: _params.cropHeight,
         lockAspect: _params.cropLockAspect,
         aspectRatio: _params.cropAspect ?? _params.customAspect,
-        showRuleOfThirds: true,
+        rotationFineDegrees: _params.rotationFineDegrees,
+        cropPanX: _params.cropPanX,
+        cropPanY: _params.cropPanY,
+        cropUserScale: _params.cropUserScale,
+        straightenActive: _straightenActive,
         onCropChanged: (l, t, w, h) {
           setState(() {
             _params = _params.copyWith(
@@ -545,6 +695,15 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
               cropTop: t,
               cropWidth: w,
               cropHeight: h,
+            );
+          });
+        },
+        onPanZoomChanged: (px, py, scale) {
+          setState(() {
+            _params = _params.copyWith(
+              cropPanX: px,
+              cropPanY: py,
+              cropUserScale: scale,
             );
           });
         },
@@ -563,14 +722,19 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             : constraints.maxHeight / ph;
         final w = pw * scale;
         final h = ph * scale;
-        return Center(
-          child: SizedBox(
-            width: w,
-            height: h,
-            child: Image.memory(
-              _previewBytes!,
-              fit: BoxFit.fill,
-              gaplessPlayback: true,
+        return InteractiveViewer(
+          minScale: 1,
+          maxScale: 4,
+          clipBehavior: Clip.none,
+          child: Center(
+            child: SizedBox(
+              width: w,
+              height: h,
+              child: Image.memory(
+                _previewBytes!,
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+              ),
             ),
           ),
         );
@@ -586,10 +750,11 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         child: Row(
           children: [
             _toolIcon(_EditTool.whiteBalance, Icons.wb_sunny_outlined, 'Balans'),
-            _toolIcon(_EditTool.brightness, Icons.brightness_6_outlined, 'Gaiš.'),
+            _toolIcon(_EditTool.exposure, Icons.exposure_outlined, 'Eksp.'),
             _toolIcon(_EditTool.contrast, Icons.contrast, 'Kontr.'),
             _toolIcon(_EditTool.highlights, Icons.wb_twilight_outlined, 'Spilgt.'),
             _toolIcon(_EditTool.shadows, Icons.gradient_outlined, 'Ēnas'),
+            _toolIcon(_EditTool.sharpness, Icons.deblur_outlined, 'Asums'),
             _toolIcon(_EditTool.transform, Icons.crop_rotate, 'Kadrs'),
           ],
         ),
@@ -650,37 +815,55 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             ),
             switch (tool) {
               _EditTool.whiteBalance => _whiteBalancePanel(),
-              _EditTool.brightness => _sliderPanel(
-                  'Gaišums',
-                  _params.brightness,
-                  -1,
-                  1,
-                  (v) => _updateParams(_params.copyWith(brightness: v)),
-                  divisions: 80,
+              _EditTool.exposure => _sliderPanel(
+                  'Ekspozīcija (EV)',
+                  _params.exposure,
+                  ExposureAdjustment.evMin,
+                  ExposureAdjustment.evMax,
+                  (v) => _updateParams(_params.copyWith(exposure: v)),
+                  divisions: 50,
+                  valueLabel: (v) {
+                    final s = v >= 0 ? '+' : '';
+                    return '$s${v.toStringAsFixed(1)} EV';
+                  },
                 ),
               _EditTool.contrast => _sliderPanel(
                   'Kontrasts',
                   _params.contrast,
-                  0.5,
-                  2,
+                  ContrastAdjustment.sliderMin,
+                  ContrastAdjustment.sliderMax,
                   (v) => _updateParams(_params.copyWith(contrast: v)),
-                  divisions: 60,
+                  divisions: 40,
+                  valueLabel: (v) => v.round().toString(),
                 ),
               _EditTool.highlights => _sliderPanel(
                   'Spilgtumi',
                   _params.highlights,
-                  -1,
-                  1,
-                  (v) => _updateParams(_params.copyWith(highlights: v)),
-                  divisions: 80,
+                  HighlightsAdjustment.sliderMin,
+                  HighlightsAdjustment.sliderMax,
+                  (v) => _updateParams(
+                    _params.copyWith(highlights: v),
+                  ),
+                  divisions: 200,
+                  valueLabel: (v) => v.round().toString(),
                 ),
               _EditTool.shadows => _sliderPanel(
                   'Ēnas',
                   _params.shadows,
-                  -1,
-                  1,
+                  ShadowsAdjustment.sliderMin,
+                  ShadowsAdjustment.sliderMax,
                   (v) => _updateParams(_params.copyWith(shadows: v)),
-                  divisions: 80,
+                  divisions: 40,
+                  valueLabel: (v) => v.round().toString(),
+                ),
+              _EditTool.sharpness => _sliderPanel(
+                  'Asums',
+                  _params.sharpness,
+                  SharpnessAdjustment.amountMin,
+                  SharpnessAdjustment.amountMax,
+                  (v) => _updateParams(_params.copyWith(sharpness: v)),
+                  divisions: 100,
+                  valueLabel: (v) => v.round().toString(),
                 ),
               _EditTool.transform => _transformPanel(),
             },
@@ -691,8 +874,19 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   }
 
   Widget _whiteBalancePanel() {
+    final baseline = _cameraMeta;
+    final showAsShot = baseline != null && !baseline.usedFallback;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (showAsShot)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              'Uzņemšanas: ${baseline.kelvin.round()} K, tint ${baseline.tint.round()}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.tonalIcon(
@@ -703,20 +897,22 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         ),
         const SizedBox(height: 4),
         _sliderRow(
-          'Temp',
+          'Temp (K)',
           _params.temperature,
-          -1,
-          1,
+          WhiteBalanceAdjustment.kelvinMin,
+          WhiteBalanceAdjustment.kelvinMax,
           (v) => _updateParams(_params.copyWith(temperature: v)),
-          divisions: 80,
+          divisions: 96,
+          valueLabel: (v) => '${v.round()} K',
         ),
         _sliderRow(
           'Tint',
           _params.tint,
-          -1,
-          1,
+          WhiteBalanceAdjustment.tintMin,
+          WhiteBalanceAdjustment.tintMax,
           (v) => _updateParams(_params.copyWith(tint: v)),
-          divisions: 80,
+          divisions: 60,
+          valueLabel: (v) => v.round().toString(),
         ),
       ],
     );
@@ -729,6 +925,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     double max,
     ValueChanged<double> onChanged, {
     int? divisions,
+    String Function(double value)? valueLabel,
   }) =>
       _sliderRow(
         label,
@@ -737,7 +934,32 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         max,
         onChanged,
         divisions: divisions,
+        valueLabel: valueLabel,
       );
+
+  Widget _straightenSlider() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Taisnot: ${_params.rotationFineDegrees.toStringAsFixed(1)}°',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        Slider(
+          value: _params.rotationFineDegrees.clamp(-45, 45),
+          min: CropStraightenMath.straightenMin,
+          max: CropStraightenMath.straightenMax,
+          divisions: 90,
+          onChangeStart: (_) => setState(() => _straightenActive = true),
+          onChangeEnd: (_) => setState(() => _straightenActive = false),
+          onChanged: (v) => _updateParams(
+            _params.copyWith(rotationFineDegrees: v),
+            refreshPreview: false,
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _transformPanel() {
     String aspectLabel = 'Formāts';
@@ -797,14 +1019,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             ),
           ],
         ),
-        _sliderRow(
-          'Pagrieziens',
-          _params.rotationFineDegrees,
-          -45,
-          45,
-          (v) => _updateParams(_params.copyWith(rotationFineDegrees: v)),
-          divisions: 90,
-        ),
+        _straightenSlider(),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
@@ -825,12 +1040,15 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     double max,
     ValueChanged<double> onChanged, {
     int? divisions,
+    String Function(double value)? valueLabel,
   }) {
     final steps = divisions ?? ((max - min) * 40).round().clamp(20, 120);
+    final labelText =
+        valueLabel != null ? valueLabel(value) : value.toStringAsFixed(2);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('$label: ${value.toStringAsFixed(2)}'),
+        Text('$label: $labelText'),
         Slider(
           value: value.clamp(min, max),
           min: min,
@@ -849,7 +1067,44 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: Column(
           children: [
-            if (_presets.isNotEmpty)
+            if (_xmpPresets.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _activeXmpPreset != null
+                      ? 'Lightroom: ${_activeXmpPreset!.name} — slīdņi = korekcijas pēc preset'
+                      : 'Lightroom (.xmp) — izvēlies bāzes preset',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _xmpPresets
+                      .map(
+                        (p) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(p.name),
+                            selected: _activeXmpPreset?.id == p.id,
+                            onSelected: (_) => _applyXmpPreset(p),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
+            if (_presets.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Iekšējie preseti',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -866,26 +1121,49 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
                       .toList(),
                 ),
               ),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: _restoreOriginal,
-                  child: const Text('Atjaunot oriģinālu'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    _updateParams(const ImageEditParams());
-                    setState(() => _activeTool = null);
-                  },
-                  child: const Text('Atiestatīt visu'),
-                ),
-                TextButton(onPressed: _saveAsPreset, child: const Text('Preset')),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _saveCurrent,
-                  child: const Text('Saglabāt'),
-                ),
-              ],
+            ],
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: _restoreOriginal,
+                    child: Text(
+                      _activeXmpPreset != null
+                          ? 'Atjaunot presetu'
+                          : _cameraMeta != null && !_cameraMeta!.usedFallback
+                              ? 'Atjaunot uzņemšanas'
+                              : 'Atjaunot oriģinālu',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _updateParams(const ImageEditParams());
+                      setState(() {
+                        _activeTool = null;
+                        _activeXmpPreset = null;
+                      });
+                      if (_cameraBaselineParams != null &&
+                          _cameraMeta != null &&
+                          !_cameraMeta!.usedFallback) {
+                        _params = _cameraBaselineParams!;
+                        _baselineParams = _cameraBaselineParams!;
+                      }
+                      _schedulePreview(immediate: true);
+                    },
+                    child: const Text('Atiestatīt visu'),
+                  ),
+                  TextButton(
+                    onPressed: _saveAsPreset,
+                    child: const Text('Preset'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _saveCurrent,
+                    child: const Text('Saglabāt'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

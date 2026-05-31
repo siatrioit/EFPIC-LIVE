@@ -19,6 +19,9 @@ import '../services/edit_preset_repository.dart';
 import '../services/app_settings.dart';
 import '../services/gallery_workflow_service.dart';
 import '../services/image_edit_service.dart';
+import '../services/lightroom_xmp_preset_repository.dart';
+import '../services/lightroom_xmp_service.dart';
+import '../screens/lightroom_xmp_presets_screen.dart';
 import '../services/raw_preview_service.dart';
 import '../services/usb_camera_coordinator.dart';
 import '../utils/image_paths.dart';
@@ -193,9 +196,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
   void _selectAllVisible() {
     final g = _gallery;
     if (g == null) return;
+    final visibleIds = _filteredImages(g).map((i) => i.id).toSet();
+    if (visibleIds.isEmpty) return;
+    final allSelected = visibleIds.every(_selectedIds.contains);
     setState(() {
       _selectionMode = true;
-      _selectedIds.addAll(_filteredImages(g).map((i) => i.id));
+      if (allSelected) {
+        _selectedIds.removeAll(visibleIds);
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIds.addAll(visibleIds);
+      }
     });
   }
 
@@ -287,6 +298,81 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
     if (color == null) return;
     await _updateSelectedImages((i) => i.copyWith(colorLabel: color));
+  }
+
+  Future<void> _applyXmpToSelection() async {
+    if (!await LightroomXmpService.instance.isAvailable()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lightroom XMP preseti pieejami tikai Android'),
+        ),
+      );
+      return;
+    }
+    final presets = await LightroomXmpPresetRepository.instance.loadAll();
+    if (presets.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nav XMP presetu — importē Programmas iestatījumos',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final preset = await pickLightroomXmpPreset(context);
+    if (preset == null || _gallery == null) return;
+
+    var updated = _gallery!;
+    var applied = 0;
+    for (final id in _selectedIds) {
+      final img = updated.images.where((i) => i.id == id).firstOrNull;
+      if (img?.localPath == null) continue;
+      final src = await ImageEditService.instance.resolveEditSource(
+        localPath: img!.localPath!,
+        galleryFileName: img.fileName,
+        thumbPath: img.thumbPath,
+        galleryFolder: updated.folderPath,
+      );
+      if (src == null) continue;
+      final baseline = ImageEditService.instance.baselineLocalPath(
+        img.localPath!,
+        galleryFileName: img.fileName,
+      );
+      final dest = ImageEditService.instance.editedOutputPath(baseline);
+      final ok = await LightroomXmpService.instance.applyPresetToImage(
+        preset: preset,
+        source: src,
+        destPath: dest,
+      );
+      if (!ok) continue;
+      applied++;
+      final images = updated.images.map((i) {
+        if (i.id == id) {
+          return i.copyWith(
+            localPath: dest,
+            thumbPath: ImagePaths.isRaw(img.localPath!) ? i.thumbPath : dest,
+          );
+        }
+        return i;
+      }).toList();
+      updated = updated.copyWith(images: images);
+    }
+    await _save(updated);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            applied > 0
+                ? 'XMP “${preset.name}” lietots $applied bildēm'
+                : 'Neizdevās piemērot XMP',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _applyPresetToSelection() async {
@@ -1179,6 +1265,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   if (v == 'rating') await _pickRatingForSelection();
                   if (v == 'color') await _pickColorForSelection();
                   if (v == 'preset') await _applyPresetToSelection();
+                  if (v == 'xmp') await _applyXmpToSelection();
                   if (v == 'edit') await _openEditSelection();
                 },
                 itemBuilder: (_) => const [
@@ -1186,7 +1273,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   PopupMenuItem(value: 'color', child: Text('Krāsu atzīme')),
                   PopupMenuItem(
                     value: 'preset',
-                    child: Text('Lietot presetu'),
+                    child: Text('Lietot iekšējo presetu'),
+                  ),
+                  PopupMenuItem(
+                    value: 'xmp',
+                    child: Text('Lietot Lightroom (.xmp)'),
                   ),
                   PopupMenuItem(
                     value: 'edit',

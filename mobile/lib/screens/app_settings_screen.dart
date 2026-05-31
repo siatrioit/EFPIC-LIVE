@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/app_settings.dart';
 import '../services/app_theme_controller.dart';
 import 'global_settings_screen.dart';
+import 'lightroom_xmp_presets_screen.dart';
 
 /// Programmas iestatījumi: izskats + brīdinājumi.
 class AppSettingsScreen extends StatefulWidget {
@@ -58,6 +59,19 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             value: ThemeMode.system,
             groupValue: _themeMode,
             onChanged: (v) => _setTheme(v!),
+          ),
+          ListTile(
+            leading: const Icon(Icons.filter_vintage_outlined),
+            title: const Text('Lightroom (.xmp) preseti'),
+            subtitle: const Text('Importēt un pārvaldīt Adobe preset failus'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const LightroomXmpPresetsScreen(),
+                ),
+              );
+            },
           ),
           const Divider(height: 32),
           ListTile(

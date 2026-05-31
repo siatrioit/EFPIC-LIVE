@@ -32,7 +32,7 @@ class EditPresetRepository {
         EditPreset(
           id: 'default-soft',
           name: 'Mīksts',
-          brightness: 0.05,
+          exposure: 0.15,
           contrast: 0.95,
           saturation: 1.05,
         ),
@@ -72,13 +72,14 @@ class EditPresetRepository {
     final preset = EditPreset(
       id: _uuid.v4(),
       name: name,
-      brightness: params.brightness,
+      exposure: params.exposure,
       contrast: params.contrast,
       saturation: params.saturation,
       temperature: params.temperature,
       tint: params.tint,
       shadows: params.shadows,
       highlights: params.highlights,
+      sharpness: params.sharpness,
       rotationDegrees: params.totalRotationDegrees.round() % 360,
       cropAspect: params.cropAspect,
     );

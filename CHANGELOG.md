@@ -4,6 +4,109 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.34] — 2026-05-31
+
+### Pievienots (Lightroom Camera Settings — Nikon)
+- `NikonCameraSettingsMapper`: Active D-Lighting, Picture Control, ISO/asums, High ISO NR (info)
+- Develop ekspozīcija +0,33 pie ADL Normal (ne kompensācijas roka −2/3)
+- Info panelis: atsevišķi kompensācija, ADL, profils
+- `docs/LIGHTROOM_WORKFLOW.md` — ADL tabula un trīs EV avoti
+
+### Labots
+- Picture Control no MakerNote baitu masīva (piem. `STANDARD` → Camera Standard, asums 40)
+
+## [0.3.33] — 2026-05-31
+
+### Pievienots (Lightroom preset → fine-tune)
+- Vienota plūsma: `.xmp` bāze + slīdņu korekcijas + kadrs → WYSIWYG saglabāšana
+- ★ Noklusējuma Lightroom presets automātiski atverot rediģēšanu
+- Slīdņi vairs noņem aktīvo XMP; „Atjaunot presetu” atiestata tikai korekcijas
+- Dokumentācija: `docs/LIGHTROOM_WORKFLOW.md`
+
+## [0.3.32] — 2026-05-31
+
+### Labots (RAW kešs / svaigi metadati)
+- _emb.jpg kešs invalidējas, ja RAW mainījies (`.rawsig` paraksts)
+- Atverot rediģēšanu: jauns preview + metadati no RAW (ne vecais temp)
+- Vairs nelasa kameras iestatījumus no novecojuša _emb.jpg EXIF
+
+## [0.3.31] — 2026-05-31
+
+### Labots (RAW metadatu nolasīšana)
+- EXIF SubIFD (ExposureBias, ColorTemperature, MakerNote) — pareiza TIFF navigācija
+- EV: frakcija 33/100 → +0.33 (ne tikai skaitītājs -4 no -4/3)
+- Slīdņi no Dart parsera; native session tikai kešam
+- Avota panelis pēc metadatu ielādes
+
+## [0.3.30] — 2026-05-31
+
+### Labots (Lightroom-style develop)
+- Vienots `developImage()` — priekšskats = saglabāšana (WYSIWYG)
+- Visi tone slīdņi: delta pret As Shot (ne dubultā kameras EV)
+- Kadrs/rotate iekļauts preview un eksportā
+- „Atiestatīt režīmu” → kameras bāze, ne 0/6500K
+
+## [0.3.29] — 2026-05-31
+
+### Pievienots (RAW develop — Lightroom ceļš)
+- Vienots native motors priekšskatam un eksportam (`RawDevelopCoordinator`)
+- Dokumentācija: `docs/RAW_DEVELOP.md` (Fāze 1 proxy, Fāze 2 LibRaw)
+- Eksports un ekrāns izmanto vienu `develop()` — WYSIWYG
+
+## [0.3.28] — 2026-05-31
+
+### Labots (baltais balans / RAW)
+- Temp/Tint slīdņi sākas ar kameras As Shot K un tint no NEF
+- Apstrāde: Von Kries delta pret bāzi (iegultais JPG nemainās pie ielādes)
+- Rīka atiestatīšana / dubultskāriens → atpakaļ uz uzņemšanas WB
+- Native Kotlin: WhiteBalanceController, WhiteBalanceMath, luminance norm
+
+## [0.3.27] — 2026-05-31
+
+### Labots (RAW metadati / As Shot)
+- Atverot RAW: native NEF/EXIF/MakerNote nolasa kameras bāzes vērtības (EV, WB, Picture Control)
+- Slīdņi sākas ar As Shot; apstrāde lieto delta pret bāzi (ne-destruktīvi)
+- RAW izmēri un avota panelis rāda nolasītos tagus
+
+## [0.3.26] — 2026-05-31
+
+### Pievienots (Lightroom XMP)
+- Importēt vairākus Adobe Lightroom `.xmp` preset failus (Programmas iestatījumi)
+- Piemērot XMP presetu galerijā (atlasītajām bildēm) un bilžu apstrādē
+- Pilna native apstrāde: tone curves, HSL, color grading, clarity, dehaze u.c.
+
+## [0.3.25] — 2026-05-30
+
+### Labots (bilžu apstrāde un galerija)
+- RAW apstrāde: piespiedu pilna iegultā JPG izvilkšana (nevis MTP sīktēls/atmiņas kešs)
+- Spilgtumu slīdnis −100…+100 (labota dubultā mērogošana apstrādē)
+- Kadra rīks: attēls aizpilda logu (vairs nav “mini bilde”)
+- Priekšskatījumā pinch-to-zoom (InteractiveViewer)
+- Galerijā “Atlasīt visus” pārslēdzas uz “noņemt atlasi”, ja viss jau atlasīts
+
+## [0.3.24] — 2026-05-30
+
+### Pievienots (Kadrs / taisnošana)
+- Lightroom-style: auto-zoom straighten (−45…+45°), pan/zoom, 9×9 režģis taisnošanai
+- ±90° ar proporcijas apmaiņu; formāti 1:1, 4:5, 8.5:11, 2:3, 16:9
+- Kotlin [CropStraightenEngine] + [CropTransformMetadata] ne-destruktīvai apstrādei
+
+## [0.3.23] — 2026-05-30
+
+### Pievienots (bilžu apstrāde)
+- RAW/NEF EXIF + Nikon MakerNote: slīdņi sākas ar kameras vērtībām (WB, EV, Picture Control)
+- Apstrāde pret iebūvēto JPG — tikai delta no kameras bāzes (priekšskatījums sakrīt)
+
+## [0.3.22] — 2026-05-30
+
+### Pievienots (bilžu apstrāde)
+- **Asums** (0–100): luminance USM, Sobel malu maska, halo ierobežojums, ātrs 3× box blur
+
+## [0.3.21] — 2026-05-30
+
+### Labots (bilžu apstrāde)
+- **Spilgtumi** (−100…+100): lineārā telpa, highlight maska, kanālu recovery un ratio-preserving lift
+
 ## [0.3.20] — 2026-05-30
 
 ### Labots (bilžu apstrāde)

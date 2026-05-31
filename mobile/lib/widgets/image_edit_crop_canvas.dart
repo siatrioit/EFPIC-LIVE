@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-/// Pārkadrēšana: velkams izgriešanas rāmis uz orientēta attēla.
+import '../utils/crop_straighten_math.dart';
+
+/// Lightroom-style crop: fixed crop window, image pan/zoom/straighten underneath.
+enum CropGridMode { ruleOfThirds, fineStraighten, hidden }
+
 class ImageEditCropCanvas extends StatefulWidget {
   const ImageEditCropCanvas({
     super.key,
@@ -15,8 +20,13 @@ class ImageEditCropCanvas extends StatefulWidget {
     required this.cropHeight,
     required this.lockAspect,
     this.aspectRatio,
+    required this.rotationFineDegrees,
+    this.cropPanX = 0,
+    this.cropPanY = 0,
+    this.cropUserScale = 1,
+    this.straightenActive = false,
     required this.onCropChanged,
-    this.showRuleOfThirds = false,
+    this.onPanZoomChanged,
   });
 
   final Uint8List imageBytes;
@@ -28,57 +38,176 @@ class ImageEditCropCanvas extends StatefulWidget {
   final double cropHeight;
   final bool lockAspect;
   final double? aspectRatio;
+  final double rotationFineDegrees;
+  final double cropPanX;
+  final double cropPanY;
+  final double cropUserScale;
+  final bool straightenActive;
   final void Function(double left, double top, double width, double height)
       onCropChanged;
-  final bool showRuleOfThirds;
+  final void Function(double panX, double panY, double userScale)?
+      onPanZoomChanged;
 
   @override
   State<ImageEditCropCanvas> createState() => _ImageEditCropCanvasState();
 }
 
 class _ImageEditCropCanvasState extends State<ImageEditCropCanvas> {
-  Rect? _imageRect;
+  Rect? _imageFitRect;
+  Rect? _cropRect;
   _DragMode _drag = _DragMode.none;
   Offset? _dragStart;
   Rect? _startCrop;
+  Offset _pan = Offset.zero;
+  double _userScale = 1;
+  bool _interacting = false;
+  Timer? _gridFadeTimer;
+  double _gridOpacity = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pan = Offset(widget.cropPanX, widget.cropPanY);
+    _userScale = widget.cropUserScale.clamp(1, 8);
+  }
+
+  @override
+  void didUpdateWidget(ImageEditCropCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.cropPanX != widget.cropPanX ||
+        oldWidget.cropPanY != widget.cropPanY) {
+      _pan = Offset(widget.cropPanX, widget.cropPanY);
+    }
+    if (oldWidget.cropUserScale != widget.cropUserScale) {
+      _userScale = widget.cropUserScale.clamp(1, 8);
+    }
+    if (widget.straightenActive && !oldWidget.straightenActive) {
+      _bumpGrid();
+    }
+  }
+
+  @override
+  void dispose() {
+    _gridFadeTimer?.cancel();
+    super.dispose();
+  }
+
+  void _bumpGrid() {
+    _gridFadeTimer?.cancel();
+    setState(() {
+      _interacting = true;
+      _gridOpacity = 1;
+    });
+    _gridFadeTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _gridOpacity = 0);
+    });
+  }
+
+  void _endInteraction() {
+    _gridFadeTimer?.cancel();
+    _gridFadeTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          _interacting = false;
+          _gridOpacity = 0;
+        });
+      }
+    });
+  }
+
+  CropGridMode get _gridMode {
+    if (_gridOpacity < 0.05 && !_interacting && !widget.straightenActive) {
+      return CropGridMode.hidden;
+    }
+    if (widget.straightenActive) return CropGridMode.fineStraighten;
+    return CropGridMode.ruleOfThirds;
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final box = Size(constraints.maxWidth, constraints.maxHeight);
-        _imageRect = _fitImageRect(box);
-        final crop = _normToDisplay(
+        _imageFitRect = _fitImageRect(box);
+        _cropRect = _normToDisplay(
           widget.cropLeft,
           widget.cropTop,
           widget.cropWidth,
           widget.cropHeight,
         );
+        final crop = _cropRect!;
+        final ir = _imageFitRect!;
+
+        final dw = ir.width;
+        final dh = ir.height;
+        final panPx = Offset(
+          _pan.dx * crop.width,
+          _pan.dy * crop.height,
+        );
+        final corrected = CropStraightenMath.enforcePanBounds(
+          imageWidth: dw,
+          imageHeight: dh,
+          cropWidth: crop.width,
+          cropHeight: crop.height,
+          thetaDegrees: widget.rotationFineDegrees,
+          userScale: _userScale,
+          pan: panPx,
+        );
+        if (corrected != panPx) {
+          _pan = Offset(
+            corrected.dx / crop.width,
+            corrected.dy / crop.height,
+          );
+        }
+
+        final matrix = CropStraightenMath.imageTransformMatrix(
+          imageWidth: dw,
+          imageHeight: dh,
+          cropCenter: crop.center,
+          cropWidth: crop.width,
+          cropHeight: crop.height,
+          thetaDegrees: widget.rotationFineDegrees,
+          userScale: _userScale,
+          pan: Offset(
+            _pan.dx * crop.width,
+            _pan.dy * crop.height,
+          ),
+        );
 
         return GestureDetector(
-          onPanStart: (d) => _onPanStart(d.localPosition, crop),
-          onPanUpdate: (d) => _onPanUpdate(d.localPosition),
-          onPanEnd: (_) => _onPanEnd(),
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: (d) => _onScaleUpdate(d, crop, ir),
+          onScaleEnd: _onScaleEnd,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (_imageRect != null)
-                Positioned.fromRect(
-                  rect: _imageRect!,
-                  child: Image.memory(
-                    widget.imageBytes,
-                    fit: BoxFit.fill,
-                    gaplessPlayback: true,
+              Positioned.fromRect(
+                rect: crop,
+                child: ClipRect(
+                  child: Transform(
+                    transform: matrix,
+                    child: SizedBox(
+                      width: dw,
+                      height: dh,
+                      child: Image.memory(
+                        widget.imageBytes,
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                      ),
+                    ),
                   ),
                 ),
-              if (_imageRect != null)
-                CustomPaint(
-                  painter: _CropOverlayPainter(
-                    imageRect: _imageRect!,
-                    cropRect: crop,
-                  ),
-                  size: box,
+              ),
+              CustomPaint(
+                painter: _CropOverlayPainter(
+                  cropRect: crop,
+                  gridMode: _gridMode,
+                  gridOpacity: widget.straightenActive
+                      ? 1.0
+                      : (_interacting ? _gridOpacity : 0.0).clamp(0.0, 1.0),
                 ),
+                size: box,
+              ),
             ],
           ),
         );
@@ -103,7 +232,7 @@ class _ImageEditCropCanvasState extends State<ImageEditCropCanvas> {
   }
 
   Rect _normToDisplay(double l, double t, double w, double h) {
-    final ir = _imageRect!;
+    final ir = _imageFitRect!;
     return Rect.fromLTWH(
       ir.left + l * ir.width,
       ir.top + t * ir.height,
@@ -113,7 +242,7 @@ class _ImageEditCropCanvasState extends State<ImageEditCropCanvas> {
   }
 
   void _displayToNorm(Rect r) {
-    final ir = _imageRect!;
+    final ir = _imageFitRect!;
     final l = ((r.left - ir.left) / ir.width).clamp(0.0, 1.0);
     final t = ((r.top - ir.top) / ir.height).clamp(0.0, 1.0);
     final w = (r.width / ir.width).clamp(0.05, 1.0 - l);
@@ -121,88 +250,132 @@ class _ImageEditCropCanvasState extends State<ImageEditCropCanvas> {
     widget.onCropChanged(l, t, w, h);
   }
 
-  void _onPanStart(Offset pos, Rect crop) {
-    const handle = 28.0;
-    _dragStart = pos;
+  void _emitPanZoom() {
+    widget.onPanZoomChanged?.call(_pan.dx, _pan.dy, _userScale);
+  }
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _bumpGrid();
+    final crop = _cropRect!;
+    const handle = 32.0;
+    _dragStart = d.localFocalPoint;
     _startCrop = crop;
-    if ((pos - crop.bottomRight).distance < handle) {
+
+    if ((d.localFocalPoint - crop.bottomRight).distance < handle) {
       _drag = _DragMode.resizeBr;
-    } else if ((pos - crop.center).distance < crop.width / 2) {
-      _drag = _DragMode.move;
+    } else if (crop.contains(d.localFocalPoint)) {
+      _drag = _DragMode.panImage;
     } else {
-      _drag = _DragMode.move;
+      _drag = _DragMode.moveCrop;
     }
   }
 
-  void _onPanUpdate(Offset pos) {
-    final ir = _imageRect;
-    final start = _startCrop;
+  void _onScaleUpdate(ScaleUpdateDetails d, Rect crop, Rect ir) {
     final from = _dragStart;
-    if (ir == null || start == null || from == null) return;
+    final start = _startCrop;
+    if (from == null || start == null) return;
 
-    final delta = pos - from;
-    Rect next;
+    if (d.scale != 1 && _drag == _DragMode.panImage) {
+      setState(() {
+        _userScale = (_userScale * d.scale).clamp(1.0, 8.0);
+      });
+      _emitPanZoom();
+      return;
+    }
+
+    final delta = d.localFocalPoint - from;
+
     switch (_drag) {
-      case _DragMode.move:
-        next = start.shift(delta);
+      case _DragMode.panImage:
+        setState(() {
+          _pan += Offset(
+            delta.dx / crop.width,
+            delta.dy / crop.height,
+          );
+        });
+        _emitPanZoom();
+        break;
+      case _DragMode.moveCrop:
+        var next = start.shift(delta);
+        next = _clampCropToImage(next, ir);
+        _displayToNorm(next);
+        setState(() {});
         break;
       case _DragMode.resizeBr:
-        next = Rect.fromLTRB(
+        var next = Rect.fromLTRB(
           start.left,
           start.top,
-          (start.right + delta.dx).clamp(start.left + 40, ir.right),
-          (start.bottom + delta.dy).clamp(start.top + 40, ir.bottom),
+          (start.right + delta.dx).clamp(start.left + 48, ir.right),
+          (start.bottom + delta.dy).clamp(start.top + 48, ir.bottom),
         );
+        if (widget.lockAspect && widget.aspectRatio != null) {
+          next = _enforceAspectCorner(next, widget.aspectRatio!, start.topLeft);
+        }
+        next = _clampCropToImage(next, ir);
+        _displayToNorm(next);
+        setState(() {});
         break;
       case _DragMode.none:
-        return;
+        break;
     }
-
-    if (widget.lockAspect && widget.aspectRatio != null) {
-      next = _enforceAspect(next, widget.aspectRatio!, ir);
-    }
-    next = _clampToImage(next, ir);
-    _displayToNorm(next);
-    setState(() {});
   }
 
-  void _onPanEnd() {
+  void _onScaleEnd(ScaleEndDetails d) {
+    final crop = _cropRect!;
+    final corrected = CropStraightenMath.enforcePanBounds(
+      imageWidth: _imageFitRect?.width ?? widget.imageWidth.toDouble(),
+      imageHeight: _imageFitRect?.height ?? widget.imageHeight.toDouble(),
+      cropWidth: crop.width,
+      cropHeight: crop.height,
+      thetaDegrees: widget.rotationFineDegrees,
+      userScale: _userScale,
+      pan: Offset(_pan.dx * crop.width, _pan.dy * crop.height),
+    );
+    setState(() {
+      _pan = Offset(
+        corrected.dx / crop.width,
+        corrected.dy / crop.height,
+      );
+    });
+    _emitPanZoom();
     _drag = _DragMode.none;
     _dragStart = null;
     _startCrop = null;
+    _endInteraction();
   }
 
-  Rect _enforceAspect(Rect r, double aspect, Rect bounds) {
+  /// Locked aspect: anchor top-left corner when dragging bottom-right.
+  Rect _enforceAspectCorner(Rect r, double aspect, Offset anchor) {
     var w = r.width;
     var h = w / aspect;
     if (h > r.height) {
       h = r.height;
       w = h * aspect;
     }
-    return Rect.fromCenter(center: r.center, width: w, height: h);
+    return Rect.fromLTWH(anchor.dx, anchor.dy, w, h);
   }
 
-  Rect _clampToImage(Rect r, Rect ir) {
-    var left = r.left.clamp(ir.left, ir.right - 40);
-    var top = r.top.clamp(ir.top, ir.bottom - 40);
-    var right = r.right.clamp(left + 40, ir.right);
-    var bottom = r.bottom.clamp(top + 40, ir.bottom);
+  Rect _clampCropToImage(Rect r, Rect ir) {
+    var left = r.left.clamp(ir.left, ir.right - 48);
+    var top = r.top.clamp(ir.top, ir.bottom - 48);
+    var right = r.right.clamp(left + 48, ir.right);
+    var bottom = r.bottom.clamp(top + 48, ir.bottom);
     return Rect.fromLTRB(left, top, right, bottom);
   }
 }
 
-enum _DragMode { none, move, resizeBr }
+enum _DragMode { none, panImage, moveCrop, resizeBr }
 
 class _CropOverlayPainter extends CustomPainter {
   _CropOverlayPainter({
-    required this.imageRect,
     required this.cropRect,
-    this.showRuleOfThirds = false,
+    required this.gridMode,
+    required this.gridOpacity,
   });
 
-  final Rect imageRect;
   final Rect cropRect;
-  final bool showRuleOfThirds;
+  final CropGridMode gridMode;
+  final double gridOpacity;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -218,44 +391,36 @@ class _CropOverlayPainter extends CustomPainter {
       ..strokeWidth = 2;
     canvas.drawRect(cropRect, border);
 
-    if (showRuleOfThirds) {
-      final grid = Paint()
-        ..color = Colors.white.withValues(alpha: 0.35)
-        ..strokeWidth = 1;
-      for (var i = 1; i < 3; i++) {
-        final fx = cropRect.left + cropRect.width * i / 3;
-        final fy = cropRect.top + cropRect.height * i / 3;
-        canvas.drawLine(
-          Offset(fx, cropRect.top),
-          Offset(fx, cropRect.bottom),
-          grid,
-        );
-        canvas.drawLine(
-          Offset(cropRect.left, fy),
-          Offset(cropRect.right, fy),
-          grid,
-        );
-      }
-    } else {
-      const step = 3;
-      for (var i = 1; i < step; i++) {
-        final fx = cropRect.left + cropRect.width * i / step;
-        final fy = cropRect.top + cropRect.height * i / step;
-        canvas.drawLine(
-          Offset(fx, cropRect.top),
-          Offset(fx, cropRect.bottom),
-          border..strokeWidth = 1,
-        );
-        canvas.drawLine(
-          Offset(cropRect.left, fy),
-          Offset(cropRect.right, fy),
-          border..strokeWidth = 1,
-        );
-      }
+    if (gridMode == CropGridMode.hidden || gridOpacity <= 0.01) return;
+
+    final divisions = gridMode == CropGridMode.fineStraighten ? 9 : 3;
+    final grid = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35 * gridOpacity)
+      ..strokeWidth = gridMode == CropGridMode.fineStraighten ? 0.5 : 1;
+
+    for (var i = 1; i < divisions; i++) {
+      final fx = cropRect.left + cropRect.width * i / divisions;
+      final fy = cropRect.top + cropRect.height * i / divisions;
+      canvas.drawLine(
+        Offset(fx, cropRect.top),
+        Offset(fx, cropRect.bottom),
+        grid,
+      );
+      canvas.drawLine(
+        Offset(cropRect.left, fy),
+        Offset(cropRect.right, fy),
+        grid,
+      );
     }
+
+    const handleR = 6.0;
+    final handle = Paint()..color = Colors.white;
+    canvas.drawCircle(cropRect.bottomRight, handleR, handle);
   }
 
   @override
   bool shouldRepaint(covariant _CropOverlayPainter old) =>
-      old.cropRect != cropRect;
+      old.cropRect != cropRect ||
+      old.gridMode != gridMode ||
+      old.gridOpacity != gridOpacity;
 }

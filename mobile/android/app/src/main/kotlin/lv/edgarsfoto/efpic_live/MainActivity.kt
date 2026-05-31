@@ -7,14 +7,21 @@ import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private var cameraUsbPlugin: CameraUsbPlugin? = null
+    private var xmpPresetPlugin: XmpPresetPlugin? = null
+    private var rawEditPlugin: RawEditPlugin? = null
+    private var rawDevelopPlugin: RawDevelopPlugin? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
         cameraUsbPlugin =
             CameraUsbPlugin(
                 this,
-                flutterEngine.dartExecutor.binaryMessenger,
+                messenger,
             )
+        xmpPresetPlugin = XmpPresetPlugin(messenger)
+        rawEditPlugin = RawEditPlugin(messenger)
+        rawDevelopPlugin = RawDevelopPlugin(messenger)
         handleUsbIntent(intent)
     }
 
@@ -33,6 +40,12 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         cameraUsbPlugin?.dispose()
         cameraUsbPlugin = null
+        xmpPresetPlugin?.dispose()
+        xmpPresetPlugin = null
+        rawEditPlugin?.dispose()
+        rawEditPlugin = null
+        rawDevelopPlugin?.dispose()
+        rawDevelopPlugin = null
         super.onDestroy()
     }
 }

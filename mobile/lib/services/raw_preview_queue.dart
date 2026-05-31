@@ -32,15 +32,21 @@ class RawPreviewQueue extends ChangeNotifier {
     required String galleryFolder,
   }) async {
     if (_completed.containsKey(rawPath)) {
-      return _completed[rawPath];
+      final cached = _completed[rawPath];
+      if (cached != null && await RawPreviewService.isFullEmbeddedPreview(cached)) {
+        return cached;
+      }
+      _completed.remove(rawPath);
     }
 
     final existing = RawPreviewService.instance.thumbPathFor(
       galleryFolder,
       rawPath,
     );
-    if (RawPreviewService.isUsableThumb(existing) &&
-        !await ImageOrientation.extractedThumbNeedsRebuild(existing)) {
+    final folder = galleryFolder;
+    if (await RawPreviewService.isFullEmbeddedPreview(existing) &&
+        !await ImageOrientation.extractedThumbNeedsRebuild(existing) &&
+        !await RawPreviewService.instance.isPreviewOutdated(rawPath, folder)) {
       _completed[rawPath] = existing;
       return existing;
     }
@@ -89,6 +95,11 @@ class RawPreviewQueue extends ChangeNotifier {
     job.completer.complete(result);
     notifyListeners();
     await _pump();
+  }
+
+  void invalidate(String rawPath) {
+    _completed.remove(rawPath);
+    notifyListeners();
   }
 
   void clearCache() {

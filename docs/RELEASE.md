@@ -27,6 +27,7 @@ flutter build apk --debug
 |----------|-----------------|
 | Bilžu rediģēšana | `image_edit_screen.dart`, galerijas izvēle «Apstrādāt bildi», skatītāja `Icons.tune` |
 | RAW priekšskatījums | `RawPreviewExtractor.kt`, `raw_preview_service.dart` |
+| RAW develop (WYSIWYG) | `RawDevelopCoordinator.kt`, `raw_develop_service.dart`, `docs/RAW_DEVELOP.md` |
 | EXIF orientācija | `image_orientation.dart`, `oriented_image_file.dart` |
 | Live imports | `camera_import_service.dart`, `gallery_screen.dart` |
 

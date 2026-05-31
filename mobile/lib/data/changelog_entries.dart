@@ -19,6 +19,143 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.34',
+    date: '2026-05-31',
+    summary: 'LR Camera Settings (Nikon)',
+    items: [
+      'ADL + Picture Control + ISO kā Lightroom',
+      'Develop +0,33 atsevišķi no rokas −2/3',
+      'XMP ★ joprojām aizstāj Camera Settings',
+      'Picture Control no MakerNote baitiem (STANDARD u.c.)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.33',
+    date: '2026-05-31',
+    summary: 'Lightroom XMP + korekcijas',
+    items: [
+      'XMP preset kā bāze, slīdņi pēc tam',
+      'Noklusējuma .xmp automātiski RAW rediģēšanā',
+      'Saglabāšana = preset + tavas izmaiņas',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.32',
+    date: '2026-05-31',
+    summary: 'RAW keša invalidācija',
+    items: [
+      'Metadati un preview no jauna pie rediģēšanas',
+      'Vecie _emb.jpg netiek atkārtoti izmantoti',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.31',
+    date: '2026-05-31',
+    summary: 'RAW EXIF SubIFD labojums',
+    items: [
+      'Pareizs EV (+0.33) un WB K no NEF',
+      'EXIF SubIFD + MakerNote',
+      'Slīdņi no labota parsera',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.30',
+    date: '2026-05-31',
+    summary: 'Lightroom WYSIWYG',
+    items: [
+      'Viens develop ceļš preview + JPG',
+      'Delta slīdņi, kadrs eksportā',
+      'Atiestatīt → As Shot',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.29',
+    date: '2026-05-31',
+    summary: 'Vienots RAW develop',
+    items: [
+      'Preview un _edited.jpg — viena native formula',
+      'Plāns: LibRaw demosaic (Fāze 2)',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.28',
+    date: '2026-05-31',
+    summary: 'WB As Shot + delta',
+    items: [
+      'Slīdņi = kameras K/tint no RAW',
+      'Priekšskats: tikai WB izmaiņa pret as-shot',
+      'Kotlin Von Kries + luminance aizsardzība',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.27',
+    date: '2026-05-31',
+    summary: 'RAW As Shot no NEF',
+    items: [
+      'Native metadatu nolasīšana (EV, WB, Picture Control)',
+      'Slīdņi = kameras bāze; Atiestatīt → As Shot',
+      'Delta apstrāde pret iegulto JPG',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.26',
+    date: '2026-05-31',
+    summary: 'Lightroom .xmp preseti',
+    items: [
+      'Importēt vairākus .xmp failus no Lightroom',
+      'Lietot galerijā un apstrādē (Android)',
+      'Pilna XMP renderēšana fonā',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.25',
+    date: '2026-05-30',
+    summary: 'RAW apstrāde un priekšskatījums',
+    items: [
+      'Pilns iegults JPG no RAW (nevis sīks MTP kešs)',
+      'Spilgtumi, kadrs un pinch-zoom apstrādē',
+      'Galerija: atlasīt visus ↔ noņemt atlasi',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.24',
+    date: '2026-05-30',
+    summary: 'Kadrs — Lightroom-style',
+    items: [
+      'Taisnot −45…+45° ar auto-zoom (bez tukšiem stūriem)',
+      'Pan/zoom, 3×3 / 9×9 režģis, ±90° ar aspect swap',
+      'CropTransformMetadata saglabāšanai',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.23',
+    date: '2026-05-30',
+    summary: 'Slīdņi no RAW metadatiem',
+    items: [
+      'Nikon NEF: Picture Control (0x0023), WB, EV no EXIF/MakerNote',
+      'Iebūvēts JPG: apstrāde tikai kā delta no kameras bāzes',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.22',
+    date: '2026-05-30',
+    summary: 'Asums — profesionāls USM',
+    items: [
+      'Slīdnis 0–100 uz luminances (bez krāsu halos)',
+      'Sobel malu maska — plakanās zonas netiek asinātas',
+      'Halo ierobežojums + ātrs box-blur high-pass',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.21',
+    date: '2026-05-30',
+    summary: 'Spilgtumi — lineārā apstrāde',
+    items: [
+      'Slīdnis −100…+100 (Lightroom-style)',
+      'Highlight recovery, ratio-preserving lift, soft mask',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.20',
     date: '2026-05-30',
     summary: 'Apstrādes avots: RAW vs JPG',
@@ -258,4 +395,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.20';
+const String appVersionLabel = '0.3.32';
