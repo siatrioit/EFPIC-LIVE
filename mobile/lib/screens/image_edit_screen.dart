@@ -15,6 +15,7 @@ import '../services/exposure_adjustment.dart';
 import '../services/shadows_adjustment.dart';
 import '../services/highlights_adjustment.dart';
 import '../services/sharpness_adjustment.dart';
+import '../services/edit_preview_engine.dart';
 import '../services/image_edit_service.dart';
 import '../services/lightroom_xmp_preset_repository.dart';
 import '../services/lightroom_xmp_service.dart';
@@ -112,7 +113,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       galleryFileName: img.fileName,
       thumbPath: img.thumbPath,
       galleryFolder: widget.galleryFolder,
-      freshForEdit: true,
+      freshForEdit: false,
     );
     final src = _editSource;
     _previewBytes = null;
@@ -138,6 +139,14 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
       if (base != null) {
         _orientedWidth = base.width;
         _orientedHeight = base.height;
+      }
+      if (widget.galleryFolder != null) {
+        unawaited(
+          EditPreviewEngine.warmProxyFromEmbedded(
+            source: src,
+            galleryFolder: widget.galleryFolder!,
+          ),
+        );
       }
 
       final defaultId =
@@ -200,12 +209,14 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             xmpPath: xmp.xmpPath,
             fineTune: _params,
             cameraBaseline: _baselineParams,
+            galleryFolder: widget.galleryFolder,
             mode: _previewModeForTool(_activeTool),
           )
         : await ImageEditService.instance.renderPreview(
             source: src,
             params: _params,
             cameraBaseline: _baselineParams,
+            galleryFolder: widget.galleryFolder,
             mode: _previewModeForTool(_activeTool),
           );
 
@@ -250,6 +261,7 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
             xmpPath: xmp.xmpPath,
             params: _params,
             cameraBaseline: _baselineParams,
+            galleryFolder: widget.galleryFolder,
           )
         : await ImageEditService.instance.renderRotatedBase(
             source: src,

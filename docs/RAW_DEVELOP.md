@@ -30,7 +30,15 @@ NEF
                     └─► export: maxLongEdge = 0 (pilns)
 ```
 
-Flutter **nekoordinē pikseļus** RAW režīmā — tikai slīdņus un bitmap no native.
+Flutter **nekoordinē pikseļus** eksportā — tikai slīdņus; preview = proxy (Dart).
+
+### Trīs motori (Lightroom-style, v0.3.40+)
+
+| Motors | Faili | Kad |
+|--------|-------|-----|
+| **Browse** | `_emb.jpg`, `RawPreviewExtractor` | Galerija, skatītājs — **nekad LibRaw** |
+| **EditPreview** | `edit_preview_engine.dart`, `_proxy.jpg` | Slīdņi, XMP preview — proxy + delta, **2048 px** |
+| **Export** | `export_develop_engine.dart`, LibRaw | Tikai `applyAndSave` / saglabāšana |
 
 ## Fāzes
 

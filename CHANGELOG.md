@@ -4,6 +4,21 @@ Visas būtiskās izmaiņas šajā projektā. Mobilās versijas atbilst `mobile/p
 
 Skatīt arī `docs/RELEASE.md` — obligātais izlaidumu reģistrs.
 
+## [0.3.40] — 2026-05-31
+
+### Pievienots (Lightroom-style trīs motori)
+- `EditPreviewEngine` — galerija/apstrādes preview tikai no proxy/iegultā JPG (2048 px)
+- `ExportDevelopEngine` — LibRaw tikai saglabāšanai
+- `_proxy.jpg` kešs ātrākai atkārtotai rediģēšanai
+
+## [0.3.39] — 2026-05-31
+
+### Labots (RAW preview + apstrāde)
+- XMP priekšskatījums atkal izmanto iegulto JPG (LibRaw tikai eksportā) — novērš OOM/crash
+- Atverot apstrādi vairs nedzēš `_emb.jpg` bez vajadzības
+- Zemāki slieņi grid/viewer thumb; skatītājs izmanto `ensureFullEmbeddedPreview`
+- Mozaīkas eksports: LibRaw probe izmēri + fallback uz vienu caurlaidi
+
 ## [0.3.38] — 2026-05-31
 
 ### Pievienots (RAW develop Fāze 3)

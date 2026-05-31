@@ -275,7 +275,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
         ImagePaths.isRaw(path) &&
         widget.gallery.folderPath != null) {
       return FutureBuilder<String?>(
-        future: RawPreviewService.instance.extractEmbeddedJpeg(
+        future: RawPreviewService.instance.ensureFullEmbeddedPreview(
           rawPath: path,
           galleryFolder: widget.gallery.folderPath!,
         ),

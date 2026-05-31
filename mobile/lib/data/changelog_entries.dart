@@ -19,6 +19,26 @@ class ChangelogEntry {
 
 const appChangelog = <ChangelogEntry>[
   ChangelogEntry(
+    version: '0.3.40',
+    date: '2026-05-31',
+    summary: 'LR-style preview / export',
+    items: [
+      'Preview: proxy JPG (bez LibRaw slīdņos)',
+      'Eksports: LibRaw pilna izšķirtspēja',
+      '_proxy.jpg kešs rediģēšanai',
+    ],
+  ),
+  ChangelogEntry(
+    version: '0.3.39',
+    date: '2026-05-31',
+    summary: 'RAW preview un apstrādes stabilitāte',
+    items: [
+      'XMP preview no iegultā JPG (LibRaw tikai saglabājot)',
+      'Nav agresīvas _emb.jpg dzēšanas atverot apstrādi',
+      'Labāka thumb ielāde galerijā un skatītājā',
+    ],
+  ),
+  ChangelogEntry(
     version: '0.3.38',
     date: '2026-05-31',
     summary: 'RAW Fāze 3 — mozaīkas + GPU',
@@ -433,4 +453,4 @@ const appChangelog = <ChangelogEntry>[
 ];
 
 /// Atbilst `pubspec.yaml` `version:` lauka major.minor.patch daļai.
-const String appVersionLabel = '0.3.38';
+const String appVersionLabel = '0.3.40';

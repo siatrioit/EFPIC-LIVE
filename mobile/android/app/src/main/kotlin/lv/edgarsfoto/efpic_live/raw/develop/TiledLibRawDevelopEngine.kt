@@ -36,10 +36,21 @@ object TiledLibRawDevelopEngine {
         if (!LibRawSupport.isLinked()) {
             throw UnsupportedOperationException("LibRaw native library not loaded")
         }
-        val fullW = session.cameraBaseline.rawWidth
-        val fullH = session.cameraBaseline.rawHeight
-        require(fullW > 0 && fullH > 0) {
-            "RAW dimensions unknown — cannot tile export: ${session.rawPath}"
+        return try {
+            developTiled(session, jpegQuality)
+        } catch (e: Exception) {
+            Log.w(TAG, "tiled export failed, fallback single pass: ${e.message}")
+            LibRawDevelopEngine().develop(session, maxLongEdge = 0, jpegQuality)
+        }
+    }
+
+    private fun developTiled(
+        session: EditSessionState,
+        jpegQuality: Int,
+    ): RawDevelopEngine.DevelopResult {
+        val (fullW, fullH) = LibRawSupport.probeOutputDimensions(session.rawPath, halfSize = false)
+        if (fullW <= 0 || fullH <= 0) {
+            throw IllegalStateException("LibRaw probe failed: ${session.rawPath}")
         }
 
         val tiles = computeTiles(fullW, fullH, TILE_SIZE)
@@ -52,7 +63,7 @@ object TiledLibRawDevelopEngine {
         Log.d(TAG, "tiled export ${session.rawPath} ${fullW}x$fullH tiles=${tiles.size}")
 
         try {
-            for ((index, tile) in tiles.withIndex()) {
+            for (tile in tiles) {
                 val linear = LibRawSupport.demosaicCropToLinear(
                     rawPath = session.rawPath,
                     halfSize = false,

@@ -16,31 +16,34 @@ class RawPreviewService {
 
   static const _channel = MethodChannel('lv.edgarsfoto.efpic_live/camera_usb');
 
-  /// MTP/Exif sīktēli bieži < 48 KB — nepietiek apstrādei.
-  static const minThumbBytes = 120 * 1024;
+  /// Grid/skatuve — mazāks iegults JPG arī der.
+  static const minDisplayThumbBytes = 24 * 1024;
+  static const minDisplayThumbLongEdge = 320;
 
-  /// Iegultajam JPG jābūt pietiekami lielam (ne tikai grid sīktēlam).
-  static const minThumbLongEdge = 960;
+  /// Rediģēšanai — pilnāks iegultais priekšskats.
+  static const minThumbBytes = 80 * 1024;
+  static const minThumbLongEdge = 720;
 
-  static bool isUsableThumb(String? path) {
+  static bool isUsableThumb(String? path) =>
+      _thumbMeets(path, minDisplayThumbBytes, minDisplayThumbLongEdge);
+
+  static bool _thumbMeets(String? path, int minBytes, int minLongEdge) {
     if (path == null) return false;
     final f = File(path);
-    if (!f.existsSync()) return false;
-    return f.lengthSync() >= minThumbBytes;
-  }
-
-  /// Pilns iegults priekšskatījums (izmērs + fails).
-  static Future<bool> isFullEmbeddedPreview(String? path) async {
-    if (!isUsableThumb(path)) return false;
+    if (!f.existsSync() || f.lengthSync() < minBytes) return false;
     try {
-      final bytes = await File(path!).readAsBytes();
+      final bytes = f.readAsBytesSync();
       final decoded = img.decodeImage(bytes);
       if (decoded == null) return false;
-      return math.max(decoded.width, decoded.height) >= minThumbLongEdge;
+      return math.max(decoded.width, decoded.height) >= minLongEdge;
     } catch (_) {
       return false;
     }
   }
+
+  /// Pilns iegults priekšskatījums (izmērs + fails) — rediģēšanai / eksportam.
+  static Future<bool> isFullEmbeddedPreview(String? path) async =>
+      _thumbMeets(path, minThumbBytes, minThumbLongEdge);
 
   bool get isAndroid => !kIsWeb && Platform.isAndroid;
 
@@ -48,6 +51,15 @@ class RawPreviewService {
     final base = p.basenameWithoutExtension(rawPath);
     return p.join(galleryFolder, '_thumbs', '${base}_emb.jpg');
   }
+
+  /// Rediģēšanas proxy (~2048 px) — ātrākam slīdņu preview (Lightroom-style).
+  String editProxyPathFor(String galleryFolder, String rawPath) {
+    final base = p.basenameWithoutExtension(rawPath);
+    return p.join(galleryFolder, '_thumbs', '${base}_proxy.jpg');
+  }
+
+  static Future<bool> isDisplayableProxy(String? path) async =>
+      _thumbMeets(path, minDisplayThumbBytes, 640);
 
   String _signaturePathFor(String embPath) => '$embPath.rawsig';
 
@@ -68,6 +80,7 @@ class RawPreviewService {
     if (!deleteExtractedFiles) return;
     for (final path in [
       thumbPathFor(galleryFolder, rawPath),
+      editProxyPathFor(galleryFolder, rawPath),
       _signaturePathFor(thumbPathFor(galleryFolder, rawPath)),
     ]) {
       final f = File(path);

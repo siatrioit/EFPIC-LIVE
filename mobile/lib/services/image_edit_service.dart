@@ -18,6 +18,8 @@ import 'shadows_adjustment.dart';
 import 'sharpness_adjustment.dart';
 import '../models/raw_camera_baseline.dart';
 import 'raw_camera_settings_parser.dart';
+import 'edit_preview_engine.dart';
+import 'export_develop_engine.dart';
 import 'raw_develop_service.dart';
 import 'raw_edit_session_service.dart';
 import 'raw_preview_queue.dart';
@@ -284,7 +286,8 @@ class ImageEditService {
   ImageEditService._();
   static final ImageEditService instance = ImageEditService._();
 
-  static const int previewMaxLongEdge = 1400;
+  /// Vienots ar [EditPreviewEngine] (Lightroom-style proxy).
+  static const int previewMaxLongEdge = EditPreviewEngine.previewMaxLongEdge;
 
   /// LibRaw as-shot JPEG cache for XMP input (key = NEF path).
   final Map<String, String> _xmpLibRawBaseByRaw = {};
@@ -297,7 +300,7 @@ class ImageEditService {
     } catch (_) {}
   }
 
-  /// XMP piemērošanas avots: LibRaw as-shot JPEG kad pieejams, citādi [source.path].
+  /// XMP avots: priekšskatījumā — ātrais iegultais JPG; eksportā — LibRaw as-shot.
   Future<String> resolveXmpSourcePath({
     required EditSource source,
     ImageEditParams? cameraBaseline,
@@ -307,6 +310,11 @@ class ImageEditService {
     if (rawPath == null) return source.path;
     if (cameraBaseline == null) return source.path;
     if (!await File(rawPath).exists()) return source.path;
+
+    // Priekšskatījumā LibRaw + XMP katrā slīdņa kustībā pārslogo atmiņu (OOM/crash).
+    final forPreview = maxLongEdge != null && maxLongEdge > 0;
+    if (forPreview) return source.path;
+
     if (!await RawDevelopService.instance.isLibRawLinked()) {
       return source.path;
     }
@@ -397,16 +405,16 @@ class ImageEditService {
       final folder = galleryFolder ?? p.dirname(baseline);
       if (freshForEdit) {
         await RawEditSessionService.instance.invalidateSession(baseline);
-        await RawPreviewService.instance.invalidateCachesForRaw(
-          rawPath: baseline,
-          galleryFolder: folder,
-          deleteExtractedFiles: false,
-        );
+        _invalidateXmpLibRawBase(baseline);
       }
       await RawPreviewService.instance.ensureFullEmbeddedPreview(
         rawPath: baseline,
         galleryFolder: folder,
-        force: freshForEdit,
+        force: freshForEdit &&
+            await RawPreviewService.instance.isPreviewOutdated(
+              baseline,
+              folder,
+            ),
       );
       final rawSource = await _resolveRawPreviewSource(
         rawPath: baseline,
@@ -496,9 +504,7 @@ class ImageEditService {
     final developSource = RawDevelopService.instance.lastDevelopSource;
     final workingFormat = source.kind == EditSourceKind.directJpeg
         ? 'JPG'
-        : libRawLinked
-            ? 'LibRaw develop'
-            : 'Iegults JPG';
+        : 'Proxy JPG (iegults)';
 
     int? rawBytes;
     int? workBytes;
@@ -582,25 +588,21 @@ class ImageEditService {
           originalFormatLabel: originalFormat,
           workingFileName: workingName,
           workingFormatLabel: workingFormat,
-          headline: libRawLinked
-              ? 'RAW fails — LibRaw develop (sensors dati)'
-              : 'RAW fails — apstrāde uz iegultā priekšskata',
+          headline: 'RAW fails — priekšskats no proxy (iegultais JPG)',
           detailLines: [
-            if (libRawLinked) ...[
-              'Demosaic no NEF (LibRaw); slīdņi = delta pret kameras As Shot.',
-              'Galerijas sīktēls joprojām no iegultā JPG; XMP bāze no LibRaw.',
-              if (developSource == 'embedded_jpeg_proxy')
-                'Pēdējais render: fallback uz iegulto JPG (LibRaw kļūda).',
-              if (developSource == 'libraw_demosaic')
-                'Pēdējais render: LibRaw demosaic.',
-              if (developSource == 'libraw_tiled_demosaic')
-                'Pēdējais render: LibRaw mozaīkas eksports (Z8/liels NEF).',
-              if (developSource == 'libraw_tiled_demosaic_gpu')
-                'Pēdējais render: LibRaw mozaīkas + GPU kompozīcija.',
-            ] else ...[
-              'Pilns RAW sensors netiek attīstīts — lietots kameras iegults JPG.',
-              'Slīdņi sākas ar kameras vērtībām; izmaiņas = delta pret As Shot.',
-            ],
+            'Galerija un slīdņi: ātrs proxy ceļš (kā Lightroom Mobile).',
+            if (libRawLinked)
+              'Saglabāšana: LibRaw develop no sensora (pilna izšķirtspēja).'
+            else
+              'Saglabāšana: develop no iegultā JPG (LibRaw nav pieejams).',
+            if (developSource == 'embedded_jpeg_proxy')
+              'Pēdējais eksports: fallback uz iegulto JPG.',
+            if (developSource == 'libraw_demosaic')
+              'Pēdējais eksports: LibRaw demosaic.',
+            if (developSource == 'libraw_tiled_demosaic')
+              'Pēdējais eksports: LibRaw mozaīkas (liels NEF).',
+            if (developSource == 'libraw_tiled_demosaic_gpu')
+              'Pēdējais eksports: LibRaw mozaīkas + GPU.',
             ...rawDetailExtras(),
             'Saglabājums: jauns JPG blakus RAW (RAW paliek nemainīts).',
           ],
@@ -693,6 +695,10 @@ class ImageEditService {
     return src?.path;
   }
 
+  /// Decode + EXIF orientācija (rediģēšanas motori).
+  Future<img.Image?> decodeOrientedSource(EditSource source) async =>
+      _decodeOriented(source);
+
   Future<img.Image?> _decodeOriented(EditSource source) async {
     final bytes = await File(source.path).readAsBytes();
     var image = img.decodeImage(bytes);
@@ -727,15 +733,6 @@ class ImageEditService {
       initialParamsFromSource(EditSource source) async {
     final rawPath = source.rawSourcePath;
     RawCameraBaseline? meta;
-
-    if (rawPath != null && await File(rawPath).exists()) {
-      await RawEditSessionService.instance.invalidateSession(rawPath);
-      RawPreviewQueue.instance.invalidate(rawPath);
-      _invalidateXmpLibRawBase(rawPath);
-      if (await RawDevelopService.instance.isLibRawLinked()) {
-        await RawDevelopService.instance.setDevelopOptions();
-      }
-    }
 
     if (rawPath != null &&
         await File(rawPath).exists() &&
@@ -843,8 +840,7 @@ class ImageEditService {
         sharpness: s.sharpness,
       );
 
-  /// Vienots develop ceļš (Lightroom): decode → [ģeometrija] → process(delta).
-  /// Priekšskats un eksports izmanto šo pašu funkciju — WYSIWYG.
+  /// [maxLongEdge] != null → [EditPreviewEngine] (proxy). null → [ExportDevelopEngine] (LibRaw).
   Future<img.Image?> developImage({
     required EditSource source,
     required ImageEditParams params,
@@ -853,63 +849,23 @@ class ImageEditService {
     bool includeColorProcess = true,
     int? maxLongEdge,
   }) async {
-    final baseline = cameraBaseline ?? params;
-    final rawPath = source.rawSourcePath;
-
-    if (includeColorProcess &&
-        rawPath != null &&
-        await File(rawPath).exists() &&
-        await RawDevelopService.instance.isLibRawLinked()) {
-      final native = await _developColorFromLibRaw(
-        rawPath: rawPath,
+    if (maxLongEdge != null) {
+      return EditPreviewEngine.developPreview(
+        source: source,
         params: params,
-        baseline: baseline,
+        cameraBaseline: cameraBaseline,
+        includeGeometry: includeGeometry,
+        includeColorProcess: includeColorProcess,
         maxLongEdge: maxLongEdge,
       );
-      if (native != null) {
-        var image = native;
-        if (includeGeometry) {
-          image = applyGeometry(image, params);
-        }
-        return image;
-      }
     }
-
-    var image = await _decodeOriented(source);
-    if (image == null) return null;
-    if (maxLongEdge != null) {
-      image = _resizeLongEdge(image, maxLongEdge);
-    }
-    if (includeGeometry) {
-      image = applyGeometry(image, params);
-    }
-    if (includeColorProcess) {
-      image = process(image, params, cameraBaseline: cameraBaseline);
-    }
-    return image;
-  }
-
-  /// LibRaw demosaic + native tone pipeline (Fāze 2); geometry stays in Dart.
-  Future<img.Image?>? _developColorFromLibRaw({
-    required String rawPath,
-    required ImageEditParams params,
-    required ImageEditParams baseline,
-    int? maxLongEdge,
-  }) async {
-    if (!await RawDevelopService.instance.isAvailable()) return null;
-    final result = maxLongEdge == null
-        ? await RawDevelopService.instance.renderExport(
-            rawPath: rawPath,
-            params: params,
-            baseline: baseline,
-          )
-        : await RawDevelopService.instance.renderPreview(
-            rawPath: rawPath,
-            params: params,
-            baseline: baseline,
-          );
-    if (result == null) return null;
-    return img.decodeJpg(result.bytes);
+    return ExportDevelopEngine.developExport(
+      source: source,
+      params: params,
+      cameraBaseline: cameraBaseline,
+      includeGeometry: includeGeometry,
+      includeColorProcess: includeColorProcess,
+    );
   }
 
   /// Lightroom `.xmp` → nelielas korekcijas (slīdņi no 0) → priekšskats.
@@ -919,9 +875,14 @@ class ImageEditService {
     required ImageEditParams fineTune,
     ImageEditParams? cameraBaseline,
     EditPreviewMode mode = EditPreviewMode.full,
+    String? galleryFolder,
   }) async {
-    final xmpInput = await resolveXmpSourcePath(
+    final previewSrc = await EditPreviewEngine.previewEditSource(
       source: source,
+      galleryFolder: galleryFolder,
+    );
+    final xmpInput = await resolveXmpSourcePath(
+      source: previewSrc,
       cameraBaseline: cameraBaseline,
       maxLongEdge: previewMaxLongEdge,
     );
@@ -1004,9 +965,14 @@ class ImageEditService {
     required String xmpPath,
     required ImageEditParams params,
     ImageEditParams? cameraBaseline,
+    String? galleryFolder,
   }) async {
-    final xmpInput = await resolveXmpSourcePath(
+    final previewSrc = await EditPreviewEngine.previewEditSource(
       source: source,
+      galleryFolder: galleryFolder,
+    );
+    final xmpInput = await resolveXmpSourcePath(
+      source: previewSrc,
       cameraBaseline: cameraBaseline,
       maxLongEdge: previewMaxLongEdge,
     );
@@ -1037,9 +1003,14 @@ class ImageEditService {
     required ImageEditParams params,
     ImageEditParams? cameraBaseline,
     EditPreviewMode mode = EditPreviewMode.full,
+    String? galleryFolder,
   }) async {
-    final image = await developImage(
+    final previewSrc = await EditPreviewEngine.previewEditSource(
       source: source,
+      galleryFolder: galleryFolder,
+    );
+    final image = await developImage(
+      source: previewSrc,
       params: params,
       cameraBaseline: cameraBaseline,
       includeGeometry: mode != EditPreviewMode.colorOnly,
@@ -1128,7 +1099,7 @@ class ImageEditService {
     required ImageEditParams params,
     ImageEditParams? cameraBaseline,
   }) async {
-    final image = await developImage(
+    final image = await ExportDevelopEngine.developExport(
       source: source,
       params: params,
       cameraBaseline: cameraBaseline,

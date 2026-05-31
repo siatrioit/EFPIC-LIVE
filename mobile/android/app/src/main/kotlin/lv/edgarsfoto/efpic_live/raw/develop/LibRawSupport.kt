@@ -108,4 +108,22 @@ object LibRawSupport {
     @JvmStatic
     fun halfSizeForMaxEdge(maxLongEdge: Int): Boolean =
         maxLongEdge > 0 && maxLongEdge <= RawDevelopCoordinator.PREVIEW_MAX_LONG_EDGE
+
+    /** Izšķirtspēja pēc demosaic (bez pilna Bitmap kopēšanas atmiņā). */
+    @JvmStatic
+    fun probeOutputDimensions(rawPath: String, halfSize: Boolean): Pair<Int, Int> {
+        return try {
+            LibRaw().use { lib ->
+                if (lib.open(rawPath) != 0) return 0 to 0
+                configureLibRaw(lib, halfSize, null)
+                if (lib.dcrawProcess() != 0) return 0 to 0
+                val w = lib.getWidth()
+                val h = lib.getHeight()
+                if (w > 0 && h > 0) w to h else 0 to 0
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "probeOutputDimensions: ${t.message}")
+            0 to 0
+        }
+    }
 }
